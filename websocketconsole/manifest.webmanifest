@@ -1,0 +1,12 @@
+{
+  "name": "websocket console from mqtt and ipfs",
+  "short_name": "websocketconsole",
+  "start_url": ".",
+  "display":"standalone",
+  "description":"Simple tool for interacting websocket",
+  "icons": [{
+    "src": "icon.png",
+    "sizes": "64x64",
+    "type": "image/png"
+  }]
+}

@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang='en' manifest="cache.appcache">
+<head>
+<meta charset='utf-8'>
+<title>MQTT web console</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="./thirdparty/bulma.min.css">
+<script src="./thirdparty/mqttws31.min.js" type="text/javascript"></script>
+<script src="./thirdparty/jszip.min.js"></script>
+
+<script src="mimecheck.js"></script>
+
+<script src="./thirdparty/msgpack.min.js"></script>
+
+<!--
+<script src="https://cdn.jsdelivr.net/npm/ipfs/dist/index.min.js"></script>
+-->
+<script src="./thirdparty/ipfs.js"></script>
+
+<script src="./thirdparty/base64ArrayBuffer.js"></script>
+
+
+<script src="./thirdparty/all.js"></script>
+<!--
+<script defer src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>
+--->
+</head>
+<body>
+
+  <div id='container'></div>
+  <script id='template' type='text/ractive'>
+      <div class="columns">
+        <section class="column">
+        <aside class="menu">
+          <ul class="menu-list">
+          {{#if uipage=="main"}}
+            <li><a class="is-active">Main</a></li>
+          {{else}}
+            <li><a on-click="['toPage','main']">Main</a></li>
+          {{/if}}
+          </ul>
+          <p class="menu-label"> Actions </p>
+            <ul class="menu-list">
+              {{#if uipage=="connections"}}
+                <li><a class="is-active">Connections</a></li>
+              {{else}}
+                <li><a on-click="['toPage','connections']">Connections</a></li>
+              {{/if}}
+              {{#if uipage=="sub"}}
+                <li><a class="is-active">Sub</a></li>
+              {{else}}
+                <li><a on-click="['toPage','sub']">Sub</a></li>
+              {{/if}}
+              {{#if uipage=="pub"}}
+                <li><a class="is-active">Pub</a></li>
+              {{else}}
+                <li><a on-click="['toPage','pub']">Pub</a></li>
+              {{/if}}
+              {{#if uipage=="IPFS"}}
+                <li><a class="is-active">IPFS</a></li>
+              {{else}}
+                <li><a on-click="['toPage','IPFS']">IPFS</a></li>
+              {{/if}}
+
+              {{#if uipage=="downloads"}}
+                <li><a on-click="['toPage','downloads']">Downloads</a></li>
+              {{/if}}
+            </ul>
+            {{#connections:connectionName}}
+              <p class="menu-label">
+                 {{connectionName}}
+                 {{#if connectionStatus[connectionName].connected}}
+                 {{else}}
+                  (OFFLINE)
+                 {{/if}}
+               </p>
+              <ul class="menu-list">
+                {{#topics:topicName}}
+                  {{#if (connectionName==selectedConnection) && (topicName==selectedTopic) }}
+                    <li><a class="is-active"> topic= {{topicName}}</a> </li>
+                  {{else}}
+                    <li><a on-click="['toSubscription',connectionName,topicName]"> topic= {{topicName}} {{#if 0<unread}} ({{unread}}) {{/if}}</a> </li>
+                  {{/if}}
+                {{/topics}}
+              </ul>
+            {{/connections}}
+        </aside>
+      </section>
+
+      <section class="column">
+        <div class="container">
+            {{#if uipage=="connections"}}
+              {{>PageConnections}}
+            {{/if}}
+            {{#if uipage=="sub"}}
+              {{>PageSub}}
+            {{/if}}
+            {{#if uipage=="pub"}}
+              {{>PagePub}}
+            {{/if}}
+            {{#if uipage=="downloads"}}
+              {{>PageDownloads}}
+            {{/if}}
+            {{#if uipage=="subscription"}}
+              {{>PageSubscription}}
+            {{/if}}
+            {{#if uipage=="IPFS"}}
+              {{>PageIPFS}}
+            {{/if}}
+            {{#if uipage=="main"}}
+              {{>PageMain}}
+            {{/if}}
+
+        </div>
+      </section>
+    </div>
+  </script>
+
+  <script src='./thirdparty/ractive.js'> </script>
+  <script src='mqttWrapper.js'> </script>
+
+  <script src='page_connections.js'> </script>
+  <script src='page_pub.js'> </script>
+  <script src='page_sub.js'> </script>
+  <script src='page_downloads.js'> </script>
+  <script src='page_subscription.js'> </script>
+  <script src='page_main.js'> </script>
+
+  <script src='page_ipfs.js'> </script>
+
+	<script language="javascript" type="text/javascript">
+
+  /*
+  mime is text/plain  or data:application/zip;base64
+  */
+  function downloadFile(filename,mime,data){
+      // Set up the link
+      var link = document.createElement("a");
+      link.setAttribute("target","_blank");
+      if(Blob !== undefined) {
+          var blob = new Blob([data], {type: mime});
+          link.setAttribute("href", URL.createObjectURL(blob));
+      } else {
+        link.setAttribute("href",mime+"," + encodeURIComponent(data));
+      }
+      link.setAttribute("download",filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  }
+
+
+  function UnsavedCount(selectedConnection,selectedTopic){
+    let data= ractive.get("recieved")
+    let msgArr=data[selectedConnection][selectedTopic]
+    if (msgArr.length==0){
+      return
+    }
+    let count=0
+    for(let msg of msgArr){
+      if (!msg.saved){
+        count++
+      }
+    }
+    return count
+  }
+
+  function zipAndDownloadInConnectionTopic(selectedConnection,selectedTopic,savedOnly){
+    let data= ractive.get("recieved")
+    let msgArr=data[selectedConnection][selectedTopic]
+    if (msgArr.length==0){
+      return
+    }
+    let count=0
+    var zip = new JSZip();
+    for(let msg of msgArr){
+      //TODO FORMAT ON CONF... assuming json
+      if ((savedOnly)&&(msg.saved)) {
+        console.log("Already saved")
+      }else{
+        console.log("adding file "+msg.filename+" to zip")
+        if (msg.filename!="undefined"){
+          zip.file(msg.filename,msg.payload) //TODO in correct name?
+          count++
+        }
+      }
+    }
+    if (count==0){
+      return
+    }
+    for(let i in msgArr){
+      msgArr[i].saved=true
+    }
+    zip.generateAsync({type:"blob"}).then(function(content) {
+      downloadFile(new Date().getTime()+"_"+selectedConnection+"_"+selectedTopic+".zip","data:application/zip;base64",content)
+    });
+  }
+
+  /*
+  Connection settings and subscriptions
+  */
+  function restoreFromLocalStorage(){
+    let data=window.localStorage.mqttWebConsole
+    if (data!=undefined){
+      let connections=JSON.parse(data)
+      for(let i in connections){
+        for(let j in connections[i].topics){
+          connections[i].topics[j].unread=0
+        }
+      }
+      ractive.set("connections",connections)
+      let k=Object.keys(connections)
+      if (0<k.length){
+        console.log("ok, using default connection "+k[0])
+        ractive.set("selectedConnection",k[0])
+      }
+    }
+  }
+
+  //Keep connections here
+  var wsClients={}
+  var ipfsNode
+
+  function wsClientConn(conName,cli){
+    console.log("WS client "+conName+" is connected "+JSON.stringify(cli))
+    let cs=ractive.get("connectionStatus")
+    cs[conName]={connected:true,error:""}
+    ractive.set("connectionStatus",cs)
+    //tilataans
+    let topics=ractive.get("connections")[conName].topics
+    if (topics!=undefined){
+      for(let topicName in topics){
+        console.log("Subscribing topic = "+topicName+" on "+conName+"  qos="+topics[topicName].qos)
+        wsClients[conName].subscribe(topicName,{
+          qos:topics[topicName].qos,
+          onSuccess:function(conName,topicname){console.log("subscribe success on "+conName+" on topic "+topicName)}.bind(this,conName,topicName)
+        })
+      }
+    }
+  }
+
+  function wsClientFails(conName,err){
+    console.log("WS client "+conName+" is failed with "+JSON.stringify(err))
+    let cs=ractive.get("connectionStatus")
+    cs[conName]={connected:false,error:JSON.stringify(err)}
+    ractive.set("connectionStatus",cs)
+  }
+
+  function mqttMatch(topic, wildcard) {
+    if (topic === wildcard) {
+      return true;
+    }
+    if (wildcard === '#') {
+      return true;
+    }
+
+    var res = [];
+
+    var t = String(topic).split('/');
+    var w = String(wildcard).split('/');
+    var i = 0;
+    for (var lt = t.length; i < lt; i++) {
+      if (w[i] === '+') {
+        res.push(t[i]);
+      } else {
+        if (w[i] === '#') {
+          return true;
+        }
+        if (w[i] !== t[i]) {
+          return false;
+        }
+      }
+      if (w[i] === '#') {
+        i += 1;
+      }
+    }
+    return (i === w.length);
+  }
+
+
+  var ractive = new Ractive({
+    el: '#container',
+    template: '#template',
+    partials:{
+      PageConnections:PageConnections,
+      PageSub:PageSub,
+      PagePub:PagePub,
+      PageDownloads:PageDownloads,
+      PageSubscription:PageSubscription,
+      PageMain:PageMain,
+      PageIPFS:PageIPFS
+    },
+
+    loginMqtt:function(){
+      makeMqttConnection();
+    },
+    logoutMqtt:function(){
+      enableRetrys(false)
+      client.disconnect()
+    },
+    data:{
+      formatByMessageFormat:function(formatname){
+        switch(formatname){
+          case "raw":
+            return "is-dark"
+          case "text":
+              return "is-dark"
+          case "json":
+            return "is-primary"
+          case "messagePack":
+            return "is-link"
+        }
+        return ""
+      },
+      formatPicIfPossible:function(payload){
+        mimedata=SpyMime(payload)
+        console.log("mimedata="+JSON.stringify(mimedata))
+        if (mimedata==undefined){
+          return ""
+        }
+        return "data:"+mimedata.mime+";base64,"+ base64ArrayBuffer(payload)
+      },
+      formatDateTimeDoNotRepeatDate:function(epoch){ //Vain muuttuneet tiedot nykypäivämäärään nähden
+        let d=new Date(epoch)
+        let epochnow=new Date().getTime()
+        let time24hformat=d.getHours() + ":" +  ('0'  + d.getMinutes()).slice(-2) +":"+ ('0'  + d.getSeconds()).slice(-2)
+
+        if ( (d.getDate()==new Date(epochnow).getDate()) && (d.getMonth()==new Date(epochnow).getMonth()) && (d.getYear()==new Date(epochnow).getYear()) ) {
+          return time24hformat //Just time needed, date is same
+        }
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        //Without year if year is same
+        let withoutYear= monthNames[d.getMonth()]+" "+d.getDate()+" "+time24hformat
+        if (d.getYear()==new Date(epochnow).getYear()){
+          return withoutYear
+        }
+        return d.getFullYear()+" "+withoutYear
+      },
+      "connectionSettings":{hostname:"192.168.1.101",port:9001,useSSL: false,username:"",password:""},
+      "connectionMessages":[],
+      "uipage":"main",
+      "selectedConnection":"",
+      "selectedTopic":"",
+      "activeCamera":false,
+      "selectedVideoDeviceId":"",
+      "shotQuality":0.03,
+      "ipfsStatus":{
+        "enabled":false,
+        "peers":[],
+        "config":{},
+        "repoStats":{}
+      },
+      "ipfsError":"",
+      "ipfsAddResult":[],
+      "connections":{},
+      "connectionStatus":{},
+      "recieved":{}
+    }
+  })
+
+  function toArrayBuf( array ) {
+      var length = array.length;
+      var buffer = new ArrayBuffer( length * 2 );
+      var view = new Uint8Array(buffer);
+      for ( var i = 0; i < length; i++) {
+          view[i] = array[i];
+      }
+      return buffer;
+  }
+
+  function increaseUnreadCount(conName,name){
+    let connections=ractive.get("connections")
+    let ur=connections[conName].topics[name].unread
+    if (ur==undefined){
+      ur=1
+    }else{
+      ur++
+    }
+    connections[conName].topics[name].unread=ur
+    ractive.set("connections",connections)
+  }
+
+  function resetUnreadCount(conName,name){
+    let connections=ractive.get("connections")
+    connections[conName].topics[name].unread=0
+    ractive.set("connections",connections)
+  }
+
+
+  function getMessageFormatAndText(bytepayload,selectedConnection,selectedTopic){
+    let basename=new Date().getTime()+"_"+selectedConnection+"_"+selectedTopic
+    let txtFormatted=new TextDecoder().decode(bytepayload)
+    //Do not accept comma as decimal separator
+    if (txtFormatted.indexOf(",")<0){
+      let numericalValue=parseFloat(txtFormatted)
+      if (!isNaN(numericalValue)){
+        return {format:"numeric",text:numericalValue,filename:basename+".num",mime:""} //Do not download as usual. Collect and download all
+      }
+    }
+
+    try{
+      let a=JSON.parse(txtFormatted)
+      return {format:"json",text:JSON.stringify(a,null,1),filename:base+".json",mime:"application/json"}
+    }catch(e){
+      console.log("Not JSON")
+    }
+
+    if(txtFormatted.startsWith("data:")){ //Its uri
+      let uriInfo=txtFormatted.substr(5,txtFormatted.indexOf(","))
+      if (5<uriInfo.length){
+        return {format:"uri",text:uriInfo,filename:base+".uri",mime:""}
+      }
+    }
+    if (txtFormatted.startsWith("/ipfs/")) {
+      return {format:"ipfs",text:txtFormatted,ipfsHash:txtFormatted,loadedIPFS:false}
+    }
+
+    if(! /[\x00-\x1F]/.test(txtFormatted)){
+      console.log("one byte chars, assuming text")
+      return {format:"text",text:txtFormatted,filename:basename+".txt",mime:"text/plain"}
+    }
+
+    mimeinfo=SpyMime(bytepayload)
+    if (0<mimeinfo.mime.length){
+      return {format:"binary",text:txtFormatted,filename:basename+"."+mimeinfo.ext,mime:mimeinfo.mime}
+    }
+
+    try{
+      let msgPackData = msgpack.decode(bytepayload);
+      let intermediate=JSON.stringify(msgPackData)
+      console.log("trying to change messagepack data back")  //So stupid
+      var refpayload= msgpack.encode(JSON.parse(intermediate))
+      let refmsgData=msgpack.decode(refpayload)
+      //Hack... assumes stability in coding
+      if (JSON.stringify(msgPackData)==JSON.stringify(refmsgData)){
+        console.log("ok this is message pack ")
+        return {format:"messagePack",text:JSON.stringify(msgPackData), filename:basename+".mpack",mime:"application/x-msgpack"}
+      }
+      console.log("Not message pack comparing "+JSON.stringify(msgPackData)+" vs "+JSON.stringify(refmsgData))
+    }catch{
+      console.log("Not messagepack")
+    }
+
+    return {format:"binary",text:txtFormatted,filename:basename,mime:"application/octet-stream"}
+  }
+
+  function removeExtraMessages(conName,topicName){
+    let maxMessages=ractive.get("connections")[conName].topics[topicName].maxMessages
+    console.log("Maximum number of messages for connection="+conName+" on topic="+topicName+" is "+maxMessages)
+    let recieved=ractive.get("recieved")
+    let lst=recieved[conName][topicName]
+    if(maxMessages<lst.length){
+      lst.splice(maxMessages)
+      recieved[conName][topicName]=lst
+      ractive.set("recieved",recieved)
+    }
+  }
+
+
+  var mediaStream=null
+
+  function stopCamera(){
+    if (mediaStream!=null){
+      mediaStream.stop()
+      mediaStream=null
+    }
+    ractive.set("activeCamera",false)
+  }
+
+
+  var listener = ractive.on({
+  	toPage: function (e,pagename) {
+      console.log("going to page "+pagename)
+      ractive.set("uipage",pagename)
+      ractive.set("selectedTopic","")
+      ractive.set("publishErrorMessage","")
+      stopCamera()
+      navigator.mediaDevices.enumerateDevices().then(gotDevices).catch(handleError);
+  	},
+    toSubscription:function (e,selectedConnection,topic){
+      console.log("GOES TO SUBSCRIPTION  connection="+selectedConnection+"  topic="+topic)
+      ractive.set("selectedConnection",selectedConnection)
+      ractive.set("selectedTopic",topic)
+      ractive.set("uipage","subscription")
+      resetUnreadCount(selectedConnection,topic)
+      stopCamera()
+      navigator.mediaDevices.enumerateDevices().then(gotDevices).catch(handleError);
+    },
+    changeSelectedConnection:function(e,connectionName){
+      ractive.set("selectedConnection",connectionName)
+      ractive.set("subscriptionErrorMessage","")
+      ractive.set("publishErrorMessage","")
+    },
+
+    unsubscribe:function(e,connectionName,topicName){
+      let a=ractive.get("connections")
+      delete(a[connectionName].topics[topicName])
+      ractive.set("connections",a)
+      //storeToLocalStorage()
+    },
+    addNewConnection: function(){
+      let arr=ractive.get("connections")
+      let nc=ractive.get("newConn")
+      arr[nc.name]={connection:nc,topics:{}}
+      ractive.set("connections",arr)
+
+      let selectedConnection=ractive.get("selectedConnection")
+      if(selectedConnection.length==0){
+        ractive.set("selectedConnection",nc.name)
+      }
+    },
+    connectionsEdited:function(){
+      console.log("connection edited")
+    },
+    deleteConnection:function(e,conName){
+      let arr=ractive.get("connections")
+      delete(wsClients[conName])
+
+      delete(arr[conName])
+      ractive.set("connections",arr)
+    },
+    disconnectConnection: function(e,conName){
+      console.log("TODO disconnect "+conName)
+      wsClients[conName].disconnect()
+    },
+    connectConnection: function(e,conName){
+      console.log("TODO Connect "+conName)
+      connectMQTT(conName)
+    },
+    getLatLon:function(e){
+      navigator.geolocation.getCurrentPosition(function(pos){
+        console.log("position is "+JSON.stringify(pos))
+        if (pos.coords!=undefined){
+          if (ractive.get("newPubPayloadFormat")=="raw"){
+            ractive.set("newPubPayload",pos.coords.latitude + "," + pos.coords.longitude)
+          }else{
+            ractive.set("newPubPayload",JSON.stringify(
+            {latitude:pos.coords.latitude,
+              longitude:pos.coords.longitude,
+              accuracy:pos.coords.accuracy,
+              altitude:pos.coords.altitude,
+              altitudeAccuracy:pos.coords.altitudeAccuracy,
+              heading:pos.coords.heading,
+              speed:pos.coords.speed
+            }))
+          }
+        }
+      })
+    },
+    publishMessage: function(e,publishInIpfsFormat,msgFormat,selectedConnection,newTopic,newPubPayload,qos,retained,filelist){
+      ractive.set("publishErrorMessage","")
+      console.log("publish to "+selectedConnection+" topic="+newTopic+"  payload="+newPubPayload+" retained="+retained)
+      console.log("Publish in IPFS="+publishInIpfsFormat)
+
+      if (wsClients[selectedConnection]==undefined){
+        ractive.set("publishErrorMessage","connection "+selectedConnection+" not available")
+        return
+      }
+
+      if (msgFormat=="file"){ //Just post file as array
+        for(var fileItem of filelist){
+          console.log("Going to upload " + fileItem.name + " mime is " + fileItem.type + " size is " + fileItem.size)
+          var fReader = new FileReader();
+
+          fReader.onload=function(newTopic,qos,retained,evt){
+            console.log("Onload event, Trying to publish "+newTopic+" qos="+qos+" retained="+retained)
+            console.log("evt="+JSON.stringify(evt))
+            console.log("ONLOAD EVENT FOR FILE readystate "+evt.target.readyState)
+            try{
+              //wsClients[selectedConnection].send(newTopic, evt.target.result, qos, retained)
+              sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, evt.target.result, qos, retained)
+              console.log("publish ok")
+            }catch(e){
+              console.log("publis fail")
+              ractive.set("publishErrorMessage","Sending file to "+selectedConnection+" failed "+e.message)
+            }
+          }.bind(this,newTopic,qos,retained)
+          fReader.readAsArrayBuffer(fileItem)
+        }
+        return
+      }
+
+      if(msgFormat=="raw"){
+        try{
+          sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, newPubPayload, qos, retained)
+          return
+        }catch(e){
+          console.log("publis fail err="+e.message)
+          ractive.set("publishErrorMessage","Sending message to "+selectedConnection+" failed "+e.message)
+        }
+      }
+
+      let msgObject={}
+      try{
+        msgObject=JSON.parse(newPubPayload)
+      }catch(err){
+        ractive.set("publishErrorMessage","JSON input parse error "+err.message)
+        return
+      }
+
+      switch(msgFormat){
+        case "json":
+          try{
+            sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, JSON.stringify(msgObject), qos, retained)
+          }catch(e){
+            console.log("publis fail err="+e.message)
+            ractive.set("publishErrorMessage","Sending message to "+selectedConnection+" failed "+e.message)
+          }
+        break
+        case "messagePack":
+          try{
+            sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, msgpack.encode(msgObject), qos, retained)
+          }catch(e){
+            console.log("publis fail err="+e.message)
+            ractive.set("publishErrorMessage","Sending message to "+selectedConnection+" failed "+e.message)
+          }
+        break
+      }
+    },
+    downloadIPFS: function(e,selectedConnection,selectedTopic,msgIndex,ipfsHash){
+      downloadFromIPFStoRecieved(selectedConnection,selectedTopic,msgIndex,ipfsHash)
+    },
+    downloadSingle: function(e,selectedConnection,selectedTopic,msgIndex){
+      console.log("TODO download con="+selectedConnection+" topic="+selectedTopic+" from index="+msgIndex)
+      // https://stuk.github.io/jszip/
+
+      let data= ractive.get("recieved")
+      let d=data[selectedConnection][selectedTopic][msgIndex].payload
+      data[selectedConnection][selectedTopic][msgIndex].saved=true
+      ractive.set("recieved",data)
+
+      downloadFile(data[selectedConnection][selectedTopic][msgIndex].filename,data[selectedConnection][selectedTopic][msgIndex].mime,d)
+    },
+    deleteSingle: function(e,selectedConnection,selectedTopic,msgIndex){
+      console.log("TODO delete con="+selectedConnection+" topic="+selectedTopic+" from index="+msgIndex)
+      let data= ractive.get("recieved")
+      data[selectedConnection][selectedTopic].splice(msgIndex,msgIndex+1)
+      ractive.set("recieved",data)
+    },
+
+    downloadAllIPFShashes: function(e,selectedConnection,selectedTopic){
+      let data= ractive.get("recieved")
+      let msgArr=data[selectedConnection][selectedTopic]
+      if (msgArr.length==0){
+        return
+      }
+      for(let msgIndex in msgArr){
+        if (msgArr[msgIndex].format=="ipfs"){
+          if (!msgArr[msgIndex].saved){
+            downloadFromIPFStoRecieved(selectedConnection,selectedTopic,msgIndex,msgArr[msgIndex].ipfsHash)
+          }
+        }
+      }
+    },
+
+    checkMIME:function(e,selectedConnection,selectedTopic,msgIndex){
+      //Kokeellinen mutta tarpeellinen ominaisuus
+      alert(JSON.stringify(SpyMime(ractive.get("recieved")[selectedConnection][selectedTopic][msgIndex].payload)))
+    },
+    downloadAllInConnectionTopic: function(e,selectedConnection,selectedTopic){
+      zipAndDownloadInConnectionTopic(selectedConnection,selectedTopic,false)
+    },
+    downloadNotSavedInConnectionTopic:function(e,selectedConnection,selectedTopic){
+      zipAndDownloadInConnectionTopic(selectedConnection,selectedTopic,true)
+    },
+    clearLocalStorage:function(){
+      ractive.set("connections",{})
+    },
+    addSubscription:function(e,selectedConnection,topicname,newSubQOS){
+      ractive.set("subscriptionErrorMessage","")
+      console.log("Subscribing "+topicname+" on "+selectedConnection+" qos="+newSubQOS)
+      try{
+        wsClients[selectedConnection].subscribe(topicname,{
+          qos:newSubQOS,
+          onFailure:function(e){
+            console.log("FAILURE "+JSON.stringify(e))
+            ractive.set("subscriptionErrorMessage",e.errorMessage)
+          },
+          onSuccess:function(conName,topicname,qos){
+            console.log("subscribe success on "+conName+" on topic "+topicname)
+            let connections=ractive.get("connections")
+            if (connections[conName].topics==undefined){
+              connections[conName].topics={}
+            }
+            connections[conName].topics[topicname]={maxMessages:10,qos:qos}
+            ractive.set("connections",connections)
+            //storeToLocalStorage()
+          }.bind(this,selectedConnection,topicname,newSubQOS)
+        })
+      }
+      catch(err){
+        ractive.set("subscriptionErrorMessage",err.message)
+      }
+    },
+
+    connectIPFS: function () {
+      ipfsNode = new Ipfs()//{ repo: ractive.get("connectIPFS") })
+      ipfsNode.once('ready', () => {
+        ractive.set("ipfsStatus",{enabled:true})
+        ipfsNode.config.get((err, config) => {
+          let sta=ractive.get("ipfsStatus")
+          if (err) {
+            sta.error="getting ipfs config fail "+JSON.stringify(err)
+          }
+          sta.config=config
+          ractive.set("ipfsStatus",sta)
+        })
+      })
+    },
+    shutdownIPFS: function () {
+      let sta=ractive.get("ipfsStatus")
+      sta.enabled=false
+      ipfsNode.shutdown()
+      ractive.set("ipfsStatus",sta)
+    },
+    startCamera:function(){
+      console.log("Checking constraints")
+      navigator.mediaDevices.getUserMedia({
+        video:{
+          deviceId:{exact:ractive.get("selectedVideoDeviceId")}
+        }}).then(function(stream){
+
+          mediaStream = stream;
+          mediaStream.stop = function () {
+            this.getVideoTracks().forEach(function (track) {track.stop();});
+          };
+
+          ractive.find("video").srcObject = stream
+          ractive.set("activeCamera",true)
+        });
+    },
+    stopCamera:function(){
+      mediaStream.stop()
+      ractive.set("activeCamera",false)
+    },
+    takeShot:function(e,publishInIpfsFormat,msgFormat,selectedConnection,newTopic,newPubPayload,qos,retained,filelist){
+      ractive.set("publishErrorMessage","")
+      console.log("publish shot to "+selectedConnection+" topic="+newTopic+"  payload="+newPubPayload+" retained="+retained)
+      console.log("Publish shot in IPFS="+publishInIpfsFormat)
+
+      const video=ractive.find("video")
+      const canvas=ractive.find("canvas")
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      let durl=canvas.toDataURL('image/webp',ractive.get("shotQuality"))
+
+      canvas.width = 0;
+      canvas.height = 0;
+      //TODO option for data url
+      sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic,dataURItoArrayBuffer(durl), qos, retained)
+    }
+  })
+
+  restoreFromLocalStorage()
+
+  ractive.observe( 'connections', function ( newValue, oldValue, keypath ) {
+    console.log("connections settings changed... storing to localstorage")
+    window.localStorage.mqttWebConsole=JSON.stringify(newValue)
+  });
+
+  setInterval(function(){
+    console.log("Running interval")
+    updateIpfsRepoStat()
+    updateIpfsPeersList()
+    reconnectIfNotConnected()
+  },1000*5)
+
+  function reconnectIfNotConnected(){
+    //TODO IMPLEMENT
+    //connectMQTT(conName)
+    let statuses=ractive.get("connectionStatus")
+    let connections=ractive.get("connections")
+    console.log("statuses are "+JSON.stringify(statuses))
+    for (let con in connections){
+      console.log("testing con "+JSON.stringify(con))
+      if(connections[con].connection.autoconnect){
+        if (statuses[con]!=undefined){
+          if ((!statuses[con].connected)){
+            console.log("YRITÄ YHTEYTTÄ olemassaolevaan "+con)
+            connectMQTT(con)
+          }
+        }else{
+          console.log("YRITÄ YHTEYTTÄ ei oo ees yritetty "+con)
+          connectMQTT(con)
+        }
+      }
+    }
+  }
+
+function sendToBrokerOrAlsoIPFS(asIPFS,selectedConnection,newTopic, payload, qos, retained){
+  console.log("SEND broker or also IPFS, asIPFS="+asIPFS+ "asIPFS="+asIPFS+" ,selectedConnection="+selectedConnection+" ,newTopic="+newTopic+", payload="+payload+", qos="+qos+", retained="+retained)
+  //asIPFS,selectedConnection,newTopic, payload, qos, retained
+  if (asIPFS){
+    addDataToIpfs(payload,function(selectedConnection,newTopic, qos, retained,hash){
+      console.log("Add data to IPFS returned hash="+hash)
+      wsClients[selectedConnection].send(newTopic, "/ipfs/"+hash, qos, retained)
+    }.bind(this,selectedConnection,newTopic, qos, retained))
+    return
+  }
+  wsClients[selectedConnection].send(newTopic, payload, qos, retained)
+}
+
+function downloadFromIPFStoRecieved(selectedConnection,selectedTopic,msgIndex,ipfsHash){
+  console.log("trying to get ipfs hash "+ipfsHash+" for con="+selectedConnection+" topic="+selectedTopic+" from index="+msgIndex)
+  ipfsNode.get(ipfsHash, function (err, files) {
+    let data= ractive.get("recieved")
+    if (err) {
+      data[selectedConnection][selectedTopic][msgIndex].text="Error getting "+ipfsHash+" error="+JSON.stringify(err)
+      ractive.set("ipfsErrors",JSON.stringify(err))
+      ractive.set("recieved",data)
+      return
+    }
+    data[selectedConnection][selectedTopic][msgIndex].loadedIPFS=true
+    let txt=""
+    for(var filedata of files){
+      txt=filedata.name+" ("+filedata.type+") ,"+filedata.size+" bytes\n"
+    }
+    data[selectedConnection][selectedTopic][msgIndex].payload=files[0].content
+    data[selectedConnection][selectedTopic][msgIndex].text=txt
+    data[selectedConnection][selectedTopic][msgIndex].mime=SpyMime(files).mime
+    console.log("SPIED MIME = "+data[selectedConnection][selectedTopic][msgIndex].mime)
+    ractive.set("recieved",data)
+  })
+}
+
+
+function connectMQTT(conName){
+  let a=ractive.get("connections")[conName].connection
+  console.log("connetion settings are "+JSON.stringify(a))
+  wsClients[conName]=new Paho.MQTT.Client(a.hostname, a.port ,conName+ new Date().getTime());
+  wsClients[conName].onConnectionLost = function(conName,responseObject){
+    console.log("Connection lost event: "+JSON.stringify(responseObject))
+    let s=""
+    if(responseObject.errorCode!=undefined){
+      if (responseObject.errorCode!=0){
+        if (responseObject.errorMessage!=undefined){
+          s=responseObject.errorMessage
+        }
+      }
+    }
+
+    let cs=ractive.get("connectionStatus")
+    cs[conName]={connected:false,error:s}
+    ractive.set("connectionStatus",cs)
+
+  }.bind(this,conName)
+
+  wsClients[conName].onMessageArrived = function(conName,message){
+    //console.log("Message arrive event"+ "  destinationName="+message.destinationName +" payloadString="+message.payloadString+" conName="+conName)
+    console.log("Message arrive event"+ "  destinationName="+message.destinationName +" conName="+conName)
+
+    //console.log("Payload bytes are "+JSON.stringify(message.payloadBytes))
+
+    //console.log("new item is "+JSON.stringify(newItem))
+
+    let reciev=ractive.get("recieved")
+    if (reciev[conName]==undefined){
+      reciev[conName]={}
+    }
+
+    //TODO PERKELE TÄHÄ LUUPPAA KAIKKI TOPICIT MITÄ TILATTU PATTERNINA JA VERTAA
+    let topics=ractive.get("connections")[conName].topics
+    for(let name in topics){
+      console.log("compare "+name+" with "+message.destinationName)
+      if (mqttMatch(message.destinationName,name)){
+        if (reciev[conName][name]==undefined){
+          reciev[conName][name]=[]
+        }
+        let newItem=getMessageFormatAndText(message.payloadBytes,conName,name)
+        newItem.time=new Date().getTime()
+        newItem.saved=false
+        newItem.topic=message.destinationName
+        newItem.size=message.payloadBytes.length
+        console.log("\nADDED NEW ITEM "+JSON.stringify(newItem))
+        newItem.payload=message.payloadBytes
+
+
+        reciev[conName][name].unshift(newItem)
+        ractive.set("recieved",reciev)
+        removeExtraMessages(conName,name)
+        //Increase unread count IF NOT selected
+        if ( (ractive.get("selectedConnection")!=conName) || (ractive.get("selectedTopic")!=name) ) {
+          increaseUnreadCount(conName,name)
+        }
+
+        bundlesize=topics[name].fileBundleSize
+        console.log("file bundle size is "+topics[name].fileBundleSize+" unsavecount="+UnsavedCount(conName,name))
+        if (bundlesize!=undefined){
+          if ( (1<bundlesize) && (bundlesize<=UnsavedCount(conName,name)) ){
+            console.log("automatic download trigger")
+            zipAndDownloadInConnectionTopic(conName,name,true)
+          }else{
+            if (topics[name].fileBundleSize==1){
+              //Single file download
+              let data= ractive.get("recieved")
+              let d=data[conName][name][0].payload
+              data[conName][name][0].saved=true
+              ractive.set("recieved",data)
+              downloadFile(data[conName][name][0].filename,data[conName][name][0].mime,d)
+            }
+          }
+        }
+      }
+    }
+  }.bind(this,conName)
+  wsClients[conName].connect({useSSL: a.useSSL,	onSuccess:wsClientConn.bind(this,conName),	onFailure:wsClientFails.bind(this,conName),userName: a.username,password: a.password});
+  //wsClients[conName].onSuccess=function(){console.log("SUCCESS JEE...")}
+  //wsClients[conName].onFailure=function(e){console.log("CONNECTION FAIL "+JSON.stringify(e))}
+  //wsClients[conName].connect({useSSL: a.useSSL,userName: a.username,password: a.password});
+
+}
+
+
+function hasGetUserMedia() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
+/*
+function gotDevices(deviceInfos) {
+  let infomap={}
+  for(let dinfo of deviceInfos){
+    infomap[dinfo.kind]=dinfo
+  }
+  ractive.set("deviceInfos",infomap)
+}
+*/
+
+function gotDevices(deviceInfos) {
+  let infomap={}
+  for(let dinfo of deviceInfos){
+    if (infomap[dinfo.kind]==undefined){
+      infomap[dinfo.kind]=[]
+    }
+    infomap[dinfo.kind].push(dinfo)
+  }
+  if (infomap.videoinput!=undefined){
+    if (infomap.videoinput.length==0){
+      ractive.set("selectedVideoDeviceId","")
+    }else{
+      ractive.set("selectedVideoDeviceId",infomap.videoinput[0].deviceId)
+    }
+  }
+
+  ractive.set("deviceInfos",infomap)
+}
+
+
+function handleError(error) {
+  console.error('Error: ', error);
+}
+
+
+function dataURItoArrayBuffer(dataURI){
+  // convert base64 to raw binary data held in a string
+  var byteString = atob(dataURI.split(',')[1]);
+
+  // separate out the mime component
+  var mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+
+  // write the bytes of the string to an ArrayBuffer
+  var arrayBuffer = new ArrayBuffer(byteString.length);
+  var _ia = new Uint8Array(arrayBuffer);
+  for (var i = 0; i < byteString.length; i++) {
+      _ia[i] = byteString.charCodeAt(i);
+  }
+
+  return arrayBuffer
+}
+
+navigator.mediaDevices.enumerateDevices().then(gotDevices).catch(handleError);
+
+//makeMqttConnection()
+</script>
+</body>
+</html>

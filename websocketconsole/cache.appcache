@@ -1,0 +1,21 @@
+CACHE MANIFEST
+/mqttWebConsole.html
+/thirdparty/bulma.min.css
+/thirdparty/mqttws31.min.js
+/thirdparty/jszip.min.js
+/mimecheck.js
+/thirdparty/msgpack.min.js
+/thirdparty/ipfs.js
+/thirdparty/base64ArrayBuffer.js
+/thirdparty/all.js
+/thirdparty/ractive.js
+/mqttWrapper.js
+/page_connections.js
+/page_pub.js
+/page_sub.js
+/page_downloads.js
+/page_subscription.js
+/page_main.js
+/page_ipfs.js
+/favicon.ico
+/manifest.webmanifest
