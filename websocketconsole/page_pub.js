@@ -2,7 +2,6 @@ var PagePub=`
 <div>
 <div class="tabs">
   <ul>
-    {{#if 1<connections.length}}
       {{#connections:name}}
         {{#if name==selectedConnection}}
           <li class="is-active"><a>{{name}}</a></li>
@@ -10,7 +9,6 @@ var PagePub=`
           <li><a on-click="['changeSelectedConnection',name]">{{name}}</a></li>
         {{/if}}
       {{/connections}}
-    {{/if}}
   </ul>
 </div>
 
@@ -63,8 +61,8 @@ var PagePub=`
       {{else}}
         <div class="select">
           <select value="{{selectedVideoDeviceId}}">
-            {{#deviceInfos.videoinput}}
-              <option value="{{deviceId}}">{{label}}</option>
+            {{#deviceInfos.videoinput:n}}
+              <option value="{{deviceId}}">{{label}} ({{n}})</option>
             {{/deviceInfos.videoinput}}
           </select>
         </div>
