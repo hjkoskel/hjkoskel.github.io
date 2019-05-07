@@ -9,6 +9,7 @@ CACHE MANIFEST
 /thirdparty/base64ArrayBuffer.js
 /thirdparty/all.js
 /thirdparty/ractive.js
+/thirdparty/pako.min.js
 /mqttWrapper.js
 /page_connections.js
 /page_pub.js

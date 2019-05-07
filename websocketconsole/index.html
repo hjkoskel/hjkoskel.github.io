@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang='en' manifest="cache.appcache">
+<html lang='en'>
 <head>
 <meta charset='utf-8'>
 <title>MQTT web console</title>
@@ -24,6 +24,13 @@
 <!--
 <script defer src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>
 --->
+
+<!--
+https://github.com/nodeca/pako/tree/master/dist
+--->
+
+<script src="./thirdparty/pako.min.js"></script>
+
 </head>
 <body>
 
@@ -422,6 +429,24 @@
 
     mimeinfo=SpyMime(bytepayload)
     if (0<mimeinfo.mime.length){
+      console.log("NYT PERKELE MIME ON "+mimeinfo.mime)
+      //Special case for gzipped data (JSON supported at first)
+      if (mimeinfo.mime=="application/gzip"){
+          //TODO LISÄÄ AAMULLA TÄHÄN TUKI
+          let decompressed = pako.inflate(bytepayload);
+          console.log("gz size is "+bytepayload.length+" decompressed data length is "+decompressed.length)
+          console.log("decompressed bytes are "+decompressed)
+          let decompressedText=new TextDecoder().decode(decompressed)
+          console.log("DEFLATED text is "+decompressedText)
+          try{
+            let a=JSON.parse(decompressedText)
+            return {format:"json",text:JSON.stringify(a,null,1),filename:basename+".json.gz",mime:"application/json"}
+          }catch(e){
+            console.log("Not JSON err="+e)
+          }
+
+
+      }
       return {format:"binary",text:txtFormatted,filename:basename+"."+mimeinfo.ext,mime:mimeinfo.mime}
     }
 
