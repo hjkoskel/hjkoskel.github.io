@@ -407,7 +407,7 @@ https://github.com/nodeca/pako/tree/master/dist
 
     try{
       let a=JSON.parse(txtFormatted)
-      return {format:"json",text:JSON.stringify(a,null,1),filename:base+".json",mime:"application/json"}
+      return {format:"json",text:JSON.stringify(a),filename:base+".json",mime:"application/json"}
     }catch(e){
       console.log("Not JSON")
     }
@@ -440,12 +440,10 @@ https://github.com/nodeca/pako/tree/master/dist
           console.log("DEFLATED text is "+decompressedText)
           try{
             let a=JSON.parse(decompressedText)
-            return {format:"json",text:JSON.stringify(a,null,1),filename:basename+".json.gz",mime:"application/json"}
+            return {format:"json",text:JSON.stringify(a),filename:basename+".json.gz",mime:"application/json"}
           }catch(e){
             console.log("Not JSON err="+e)
           }
-
-
       }
       return {format:"binary",text:txtFormatted,filename:basename+"."+mimeinfo.ext,mime:mimeinfo.mime}
     }
