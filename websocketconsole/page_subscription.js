@@ -28,7 +28,12 @@ var PageSubscription=`
   {{#recieved[selectedConnection][selectedTopic]:msgIndex}}
     <span class="tag is-warning">{{format}}</span>
     {{#if format!="ipfs"}}
-      <span class="tag is-warning">{{size}} bytes</span>
+      <span class="tag is-warning">
+      {{size}} bytes
+      {{#if uncompressedSize}}
+        , {{uncompressedSize}} in text
+      {{/if}}
+      </span>
     {{/if}}
 
     <article class="message {{formatByMessageFormat(format)}}">

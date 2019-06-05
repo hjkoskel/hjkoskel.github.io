@@ -52,6 +52,14 @@ var PagePub=`
     <p class="help">Payload format</p>
   </div>
 
+  {{#if (newPubPayloadFormat=="json")||(newPubPayloadFormat=="messagePack")  }}
+  <label class="checkbox">
+    <input type="checkbox" checked={{newDoDataGzip}}>
+    Gzip payload
+  </label>
+  {{/if}}
+
+
   {{#if newPubPayloadFormat=="file"}}
     <input type='file' value='{{pubFileList}}'/>
   {{else}}
@@ -99,10 +107,10 @@ var PagePub=`
   {{#if newPubPayloadFormat!="cameraShot"}}
     {{#if 0<newPubTopic.length}}
       <p class="control">
-        <a class="button is-primary" on-click="['publishMessage',false,newPubPayloadFormat,selectedConnection,newPubTopic,newPubPayload,parseInt(newPubQOS),newPubRetain,pubFileList]"> Publish to {{newPubTopic}} on {{selectedConnection}} </a>
+        <a class="button is-primary" on-click="['publishMessage',false]"> Publish to {{newPubTopic}} on {{selectedConnection}} </a>
       </p>
       {{#if ipfsStatus.enabled}}
-        <a class="button is-primary" on-click="['publishMessage',true,newPubPayloadFormat,selectedConnection,newPubTopic,newPubPayload,parseInt(newPubQOS),newPubRetain,pubFileList]"> Publish IPFS hash to {{newPubTopic}} on {{selectedConnection}} </a>
+        <a class="button is-primary" on-click="['publishMessage',true]"> Publish IPFS hash to {{newPubTopic}} on {{selectedConnection}} </a>
       {{/if}}
       <a class="button" on-click="['getLatLon']">Get my LAT LON to payload</a>
     {{/if}}

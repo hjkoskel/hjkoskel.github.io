@@ -311,17 +311,21 @@ https://github.com/nodeca/pako/tree/master/dist
           case "raw":
             return "is-dark"
           case "text":
-              return "is-dark"
+            return "is-dark"
           case "json":
             return "is-primary"
+          case "json (gzip)":
+            return "is-success"
           case "messagePack":
             return "is-link"
+          case "messagePack (gzip)":
+            return "is-info"
         }
         return ""
       },
       formatPicIfPossible:function(payload){
         mimedata=SpyMime(payload)
-        console.log("mimedata="+JSON.stringify(mimedata))
+        //console.log("mimedata="+JSON.stringify(mimedata))
         if (mimedata==undefined){
           return ""
         }
@@ -407,9 +411,9 @@ https://github.com/nodeca/pako/tree/master/dist
 
     try{
       let a=JSON.parse(txtFormatted)
-      return {format:"json",text:JSON.stringify(a),filename:base+".json",mime:"application/json"}
+      return {format:"json",text:JSON.stringify(a),filename:basename+".json",mime:"application/json"}
     }catch(e){
-      console.log("Not JSON")
+      console.log("Not JSON parse error name="+e.name+" message="+e.message)
     }
 
     if(txtFormatted.startsWith("data:")){ //Its uri
@@ -423,26 +427,41 @@ https://github.com/nodeca/pako/tree/master/dist
     }
 
     if(! /[\x00-\x1F]/.test(txtFormatted)){
-      console.log("one byte chars, assuming text")
+      //console.log("one byte chars, assuming text")
       return {format:"text",text:txtFormatted,filename:basename+".txt",mime:"text/plain"}
     }
 
     mimeinfo=SpyMime(bytepayload)
     if (0<mimeinfo.mime.length){
-      console.log("NYT PERKELE MIME ON "+mimeinfo.mime)
       //Special case for gzipped data (JSON supported at first)
       if (mimeinfo.mime=="application/gzip"){
           //TODO LISÄÄ AAMULLA TÄHÄN TUKI
           let decompressed = pako.inflate(bytepayload);
           console.log("gz size is "+bytepayload.length+" decompressed data length is "+decompressed.length)
-          console.log("decompressed bytes are "+decompressed)
           let decompressedText=new TextDecoder().decode(decompressed)
-          console.log("DEFLATED text is "+decompressedText)
           try{
             let a=JSON.parse(decompressedText)
-            return {format:"json",text:JSON.stringify(a),filename:basename+".json.gz",mime:"application/json"}
+            let txt=JSON.stringify(a)
+            return {format:"json (gzip)",text:txt,filename:basename+".json.gz",mime:"application/json",uncompressedSize:txt.length}
           }catch(e){
             console.log("Not JSON err="+e)
+          }
+          //HACK
+          try{
+            let msgPackData = msgpack.decode(decompressed);
+            let intermediate=JSON.stringify(msgPackData)
+            //console.log("trying to change messagepack data back")  //So stupid
+            var refpayload= msgpack.encode(JSON.parse(intermediate))
+            let refmsgData=msgpack.decode(refpayload)
+            //Hack... assumes stability in coding
+            if (JSON.stringify(msgPackData)==JSON.stringify(refmsgData)){
+              console.log("ok this is message pack ")
+              let txt=JSON.stringify(msgPackData)
+              return {format:"messagePack (gzip)",text:txt, filename:basename+".mpack",mime:"application/x-msgpack",uncompressedSize:txt.length}
+            }
+            console.log("Not message pack comparing "+JSON.stringify(msgPackData)+" vs "+JSON.stringify(refmsgData))
+          }catch{
+            console.log("Not messagepack")
           }
       }
       return {format:"binary",text:txtFormatted,filename:basename+"."+mimeinfo.ext,mime:mimeinfo.mime}
@@ -451,13 +470,14 @@ https://github.com/nodeca/pako/tree/master/dist
     try{
       let msgPackData = msgpack.decode(bytepayload);
       let intermediate=JSON.stringify(msgPackData)
-      console.log("trying to change messagepack data back")  //So stupid
+      //console.log("trying to change messagepack data back")  //So stupid
       var refpayload= msgpack.encode(JSON.parse(intermediate))
       let refmsgData=msgpack.decode(refpayload)
       //Hack... assumes stability in coding
       if (JSON.stringify(msgPackData)==JSON.stringify(refmsgData)){
         console.log("ok this is message pack ")
-        return {format:"messagePack",text:JSON.stringify(msgPackData), filename:basename+".mpack",mime:"application/x-msgpack"}
+        let txt=JSON.stringify(msgPackData)
+        return {format:"messagePack",text:txt, filename:basename+".mpack",mime:"application/x-msgpack",uncompressedSize:txt.length}
       }
       console.log("Not message pack comparing "+JSON.stringify(msgPackData)+" vs "+JSON.stringify(refmsgData))
     }catch{
@@ -493,7 +513,6 @@ https://github.com/nodeca/pako/tree/master/dist
 
   var listener = ractive.on({
   	toPage: function (e,pagename) {
-      console.log("going to page "+pagename)
       ractive.set("uipage",pagename)
       ractive.set("selectedTopic","")
       ractive.set("publishErrorMessage","")
@@ -501,7 +520,6 @@ https://github.com/nodeca/pako/tree/master/dist
       navigator.mediaDevices.enumerateDevices().then(gotDevices).catch(handleError);
   	},
     toSubscription:function (e,selectedConnection,topic){
-      console.log("GOES TO SUBSCRIPTION  connection="+selectedConnection+"  topic="+topic)
       ractive.set("selectedConnection",selectedConnection)
       ractive.set("selectedTopic",topic)
       ractive.set("uipage","subscription")
@@ -543,11 +561,9 @@ https://github.com/nodeca/pako/tree/master/dist
       ractive.set("connections",arr)
     },
     disconnectConnection: function(e,conName){
-      console.log("TODO disconnect "+conName)
       wsClients[conName].disconnect()
     },
     connectConnection: function(e,conName){
-      console.log("TODO Connect "+conName)
       connectMQTT(conName)
     },
     getLatLon:function(e){
@@ -570,10 +586,27 @@ https://github.com/nodeca/pako/tree/master/dist
         }
       })
     },
-    publishMessage: function(e,publishInIpfsFormat,msgFormat,selectedConnection,newTopic,newPubPayload,qos,retained,filelist){
+    //publishMessage: function(e,publishInIpfsFormat,msgFormat,selectedConnection,newTopic,newPubPayload,qos,retained,filelist){
+    publishMessage: function(e,publishInIpfsFormat){
+      //<a class="button is-primary" on-click="['publishMessage',false,newPubPayloadFormat,selectedConnection,newPubTopic,newPubPayload,parseInt(newPubQOS),newPubRetain,pubFileList]"> Publish to {{newPubTopic}} on {{selectedConnection}} </a>
+
+      //USE AS PARAMETER let publishInIpfsFormat=ractive.get("")
+      let msgFormat=ractive.get("newPubPayloadFormat");
+      let selectedConnection=ractive.get("selectedConnection")
+      let newTopic=ractive.get("newPubTopic")
+      let newPubPayload=ractive.get("newPubPayload")
+      let qos=parseInt(ractive.get("newPubQOS"))
+      let retained=ractive.get("newPubRetain")
+      let filelist=ractive.get("pubFileList")
+      let useCompression=ractive.get("newDoDataGzip")
+      //Take from parametrers vs pick from
       ractive.set("publishErrorMessage","")
-      console.log("publish to "+selectedConnection+" topic="+newTopic+"  payload="+newPubPayload+" retained="+retained)
-      console.log("Publish in IPFS="+publishInIpfsFormat)
+      //console.log("publish to "+selectedConnection+" topic="+newTopic+"  payload="+newPubPayload+" retained="+retained," compressed="+useCompression)
+      //console.log("Publish in IPFS="+publishInIpfsFormat)
+
+      if ( (msgFormat!="json")&&(msgFormat!="messagePack") ){
+        useCompression=false
+      }
 
       if (wsClients[selectedConnection]==undefined){
         ractive.set("publishErrorMessage","connection "+selectedConnection+" not available")
@@ -591,7 +624,7 @@ https://github.com/nodeca/pako/tree/master/dist
             console.log("ONLOAD EVENT FOR FILE readystate "+evt.target.readyState)
             try{
               //wsClients[selectedConnection].send(newTopic, evt.target.result, qos, retained)
-              sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, evt.target.result, qos, retained)
+              sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, evt.target.result, qos, retained,useCompression)
               console.log("publish ok")
             }catch(e){
               console.log("publis fail")
@@ -605,7 +638,7 @@ https://github.com/nodeca/pako/tree/master/dist
 
       if(msgFormat=="raw"){
         try{
-          sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, newPubPayload, qos, retained)
+          sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, newPubPayload, qos, retained,useCompression)
           return
         }catch(e){
           console.log("publis fail err="+e.message)
@@ -624,7 +657,7 @@ https://github.com/nodeca/pako/tree/master/dist
       switch(msgFormat){
         case "json":
           try{
-            sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, JSON.stringify(msgObject), qos, retained)
+            sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, JSON.stringify(msgObject), qos, retained,useCompression)
           }catch(e){
             console.log("publis fail err="+e.message)
             ractive.set("publishErrorMessage","Sending message to "+selectedConnection+" failed "+e.message)
@@ -632,7 +665,7 @@ https://github.com/nodeca/pako/tree/master/dist
         break
         case "messagePack":
           try{
-            sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, msgpack.encode(msgObject), qos, retained)
+            sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic, msgpack.encode(msgObject), qos, retained,useCompression)
           }catch(e){
             console.log("publis fail err="+e.message)
             ractive.set("publishErrorMessage","Sending message to "+selectedConnection+" failed "+e.message)
@@ -771,7 +804,8 @@ https://github.com/nodeca/pako/tree/master/dist
       canvas.width = 0;
       canvas.height = 0;
       //TODO option for data url
-      sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic,dataURItoArrayBuffer(durl), qos, retained)
+      //TODO need gzip compression? No?  it is already compressed
+      sendToBrokerOrAlsoIPFS(publishInIpfsFormat,selectedConnection,newTopic,dataURItoArrayBuffer(durl), qos, retained,false)
     }
   })
 
@@ -811,9 +845,13 @@ https://github.com/nodeca/pako/tree/master/dist
     }
   }
 
-function sendToBrokerOrAlsoIPFS(asIPFS,selectedConnection,newTopic, payload, qos, retained){
-  console.log("SEND broker or also IPFS, asIPFS="+asIPFS+ "asIPFS="+asIPFS+" ,selectedConnection="+selectedConnection+" ,newTopic="+newTopic+", payload="+payload+", qos="+qos+", retained="+retained)
+function sendToBrokerOrAlsoIPFS(asIPFS,selectedConnection,newTopic, payload, qos, retained,useCompression){
+  console.log("SEND broker or also IPFS, asIPFS="+asIPFS+ "asIPFS="+asIPFS+" ,selectedConnection="+selectedConnection+" ,newTopic="+newTopic+", payload="+payload+", qos="+qos+", retained="+retained+", compression="+useCompression)
   //asIPFS,selectedConnection,newTopic, payload, qos, retained
+  if (useCompression){
+    payload=pako.deflate(payload,{"gzip":true})
+  }
+
   if (asIPFS){
     addDataToIpfs(payload,function(selectedConnection,newTopic, qos, retained,hash){
       console.log("Add data to IPFS returned hash="+hash)
@@ -895,7 +933,7 @@ function connectMQTT(conName){
         newItem.saved=false
         newItem.topic=message.destinationName
         newItem.size=message.payloadBytes.length
-        console.log("\nADDED NEW ITEM "+JSON.stringify(newItem))
+        //console.log("\nADDED NEW ITEM "+JSON.stringify(newItem))
         newItem.payload=message.payloadBytes
 
 
