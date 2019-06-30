@@ -9,6 +9,11 @@ Going to convert this to rust. But prototype at first with this
 var maxpulsescountstored=200;  //Allow to do actual CPM  from latest minute
 
 const MAXPULSETIMESTAMPS=100; //Limit memory usage, how many pulse timestamps are stored. Used on low radiation. Activity under 2.69Bq
+const MAXTIMEBLOCKCOUNT=200 //Testing :D
+
+const MAXONLINELOGENTRIES=128
+const ONLINELOGACCURACY=1000*10
+
 
 //Keep all statuses and cumulatives here. use counts per minute number always
 var pulseStatus={
@@ -34,8 +39,6 @@ var pulseStatus={
   }
 }
 
-const MAXONLINELOGENTRIES=128
-const ONLINELOGACCURACY=1000*10
 
 //TODO rust camel case?
 function sessionStartsNow(tNow,arr){
@@ -53,7 +56,7 @@ function sessionRunsNow(tNow,arr){
 }
 
 
-const MAXTIMEBLOCKCOUNT=10 //Testing :D
+
 //Pushes if start time is too much. Its ok to not to match wall clock hour or minute threshold :)
 function newcumulativeblock(tNow,blocks,blocksize,newcounts){
   blocks.push({t:tNow,counts:newcounts})
@@ -85,11 +88,13 @@ function initializePulseCounter(fs,samplecount) {
   maxpulsescountstored=Math.ceil(60/(samplecount/fs))
 }
 
+
+
 /*
 index vector,
 sampling rate and time when sampling started
 */
-function processPulses(pulseIndexVec,timestart){
+function processPulses(pulseIndexVec,timestart,avgSecondOptions){
   let tStep=1000/pulseStatus.fs
 
   pulseStatus.cumulatives.total+=pulseIndexVec.length
@@ -113,7 +118,13 @@ function processPulses(pulseIndexVec,timestart){
   }
   */
   //Only meaningfull averaging times (plot these, for that reason in even...)
-  pulseStatus.cpm=[{"avg":1},{"avg":5},{"avg":10},{"avg":15},{"avg":20},{"avg":25},{"avg":30},{"avg":35},{"avg":40},{"avg":45},{"avg":50},{"avg":55},{"avg":60}];
+
+  pulseStatus.cpm=[]
+  for(let sec of avgSecondOptions){
+    pulseStatus.cpm.push({"avg":sec})
+  }
+
+  //HACK pulseStatus.cpm=[{"avg":1},{"avg":5},{"avg":10},{"avg":15},{"avg":20},{"avg":25},{"avg":30},{"avg":35},{"avg":40},{"avg":45},{"avg":50},{"avg":55},{"avg":60}];
 
   pulseSum=0;
   for(let index=pulseStatus.pulsecountlog.length-1;0<=index;index--){//Start from latest

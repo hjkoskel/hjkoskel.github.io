@@ -27,7 +27,7 @@
         <a class="button is-info is-large" on-click="['startCapture']">Start</a>
       {{/if}}
       <br>
-
+      Found  {{display.newpulses}} new pulses
       <h1 class="title">
       {{display.cpm}} CPM on {{display.averagetime}} sec average
       </h1>
@@ -68,9 +68,9 @@
                 <label class="label">Averaging time</label>
                 <div class="select">
                   <select value={{settings.averageTime}}>
-                    {{#pulseStatus.cpm:index}}
-                    <option value="{{index}}">{{avg}}s, {{formatToFixed(cpm,2)}} cpm</option>
-                    {{/pulseStatus.cpm}}
+                    {{#avgoptions:index}}
+                    <option value="{{index}}">{{this}}s</option>
+                    {{/avgoptions}}
                   </select>
                 </div>
                 <p class="help">Moving average time, short time when scouting</p>
@@ -329,8 +329,8 @@
         return drawgeigersignal(ctx,canv.width,canv.height,latestData,set.decayfactor,set.downth,set.upth);
       }
 
-
-
+      const AVGOPTIONS=[1,5,10,15,20,25,30,35,40,45,50,55,60]
+      ractive.set("avgoptions",AVGOPTIONS) //Set here ,prevent stupid blinking dialog on mobile
       var listener = ractive.on({
         downloadLocalStorage(){
           let doc={ //PAska locastorage ei ossoo ku strinkejä
@@ -412,11 +412,10 @@
               latestData=data
 
               indexArr=redrawRealtimePlot(ractive.get("settings"));
-              processPulses(indexArr,new Date().getTime());
+              processPulses(indexArr,new Date().getTime(),AVGOPTIONS);
               ractive.set("pulseStatus",pulseStatus)
               //ractive.set("pulseCount",calcBoolPulses(pulsed))
 
-              //console.log("buffer have "+pulseStatus.bufTimeLen/1000+" seconds of pulses")
               //Update activity
 
               //Limite update interval
@@ -431,36 +430,12 @@
               //TODO calc calibs here
               let settings=ractive.get("settings")
               ractive.set("display",{
-                "cpm":Math.floor(pulseStatus.cpm[settings.averageTime].cpm),averagetime:pulseStatus.cpm[settings.averageTime].avg
+                "cpm":Math.floor(pulseStatus.cpm[settings.averageTime].cpm),averagetime:pulseStatus.cpm[settings.averageTime].avg,newpulses:pulseStatus.pulsecountlog[pulseStatus.pulsecountlog.length-1]
               })
             };
           });
         }
       })
-
-
-
-      /*
-      navigator.geolocation.getCurrentPosition(function(pos){
-        console.log("position is "+JSON.stringify(pos))
-        if (pos.coords!=undefined){
-          if (ractive.get("newPubPayloadFormat")=="raw"){
-            ractive.set("newPubPayload",pos.coords.latitude + "," + pos.coords.longitude)
-          }else{
-            ractive.set("newPubPayload",JSON.stringify(
-            {latitude:pos.coords.latitude,
-              longitude:pos.coords.longitude,
-              accuracy:pos.coords.accuracy,
-              altitude:pos.coords.altitude,
-              altitudeAccuracy:pos.coords.altitudeAccuracy,
-              heading:pos.coords.heading,
-              speed:pos.coords.speed
-            }))
-          }
-        }
-      })
-    },1000);
-    */
 
 
     </script>
