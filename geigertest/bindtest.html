@@ -1,0 +1,506 @@
+<html>
+  <head>
+    <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
+    <script src="pulsecounter.js"></script>
+    <script src="geologger.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.5/css/bulma.css">
+    <script src="https://cdn.jsdelivr.net/npm/ractive"></script>
+  </head>
+  <body>
+
+    <canvas id="piirros" width="512" height="256"></canvas>
+
+    <div id='container'></div>
+    <script id='template' type='text/ractive'>
+      <div class="select">
+        <select value="{{selectedAudioDeviceId}}">
+          {{#deviceInfos.audioinput:n}}
+            <option value="{{deviceId}}">{{label}} {{deviceId}} ({{n}})</option>
+          {{/deviceInfos.audioinput}}
+        </select>
+      </div>
+
+      {{#if capturing}}
+        <a class="button is-danger" on-click="['stopCapture']">Stop</a>
+      {{else}}
+        <a class="button is-info is-large" on-click="['startCapture']">Start</a>
+      {{/if}}
+      <br>
+
+      <h1 class="title">
+      {{display.cpm}} CPM on {{display.averagetime}} sec average
+      </h1>
+      <progress class="progress is-info" value="{{display.cpm}}" min="0" max="{{settings.cpmDisplayMax}}"></progress>
+
+      <br>
+      <a class="button" on-click="['downloadAsText']">download signal as text</a>
+
+
+      <div class="tile is-ancestor">
+        <div class="tile is-parent">
+          <article class="tile is-child box">
+            <p class="title">Settings</p>
+
+              <div class="field">
+                <label class="label">Decay factor</label>
+                <div class="control">
+                  <input type="number" min="0" max="0.03" step="0.0005" value="{{settings.decayfactor}}" />
+                  <input type="range" min="0" max="0.03" step="0.0005" value="{{settings.decayfactor}}" /> </div>
+              </div>
+
+              <div class="field">
+                <label class="label">Down transition threshold</label>
+                <div class="control"> <input type="number" min="0" max="1" step="0.001" value="{{settings.downth}}" /> <input type="range" min="0" max="1" step="0.001" value="{{settings.downth}}" /> </div>
+              </div>
+
+              <div class="field">
+                <label class="label">Up transition threshold</label>
+                <div class="control"> <input type="number" min="0" max="1" step="0.001" value="{{settings.upth}}" /> <input type="range" min="0" max="1" step="0.001" value="{{settings.upth}}" /> </div>
+              </div>
+
+              <div class="field">
+                <label class="label">Bar chart max CPM (scales with calib)</label>
+                <div class="control"> <input type="number" min="0" max="1" step="1" value="{{settings.cpmDisplayMax}}" /> </div>
+              </div>
+
+              <div class="field">
+                <label class="label">Averaging time</label>
+                <div class="select">
+                  <select value={{settings.averageTime}}>
+                    {{#pulseStatus.cpm:index}}
+                    <option value="{{index}}">{{avg}}s, {{formatToFixed(cpm,2)}} cpm</option>
+                    {{/pulseStatus.cpm}}
+                  </select>
+                </div>
+                <p class="help">Moving average time, short time when scouting</p>
+              </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="tile is-ancestor">
+        <div class="tile is-parent">
+          <article class="tile is-child box">
+            <p class="title">In minutes</p>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Counts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#pulseStatus.cumulatives.minuteBlocks}}
+                <tr>
+                  <td>{{formatDateTimeDoNotRepeatDate(t)}}</td><td>{{counts}}</td>
+                </tr>
+                {{/pulseStatus.cumulatives.minuteBlocks}}
+              </tbody>
+            </table>
+          </article>
+        </div>
+      </div>
+
+
+      <div class="tile is-ancestor">
+        <div class="tile is-parent">
+          <article class="tile is-child box">
+            <p class="title">In hours</p>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Counts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#pulseStatus.cumulatives.hourBlocks}}
+                <tr>
+                  <td>{{formatDateTimeDoNotRepeatDate(t)}}</td><td>{{counts}}</td>
+                </tr>
+                {{/pulseStatus.cumulatives.hourBlocks}}
+              </tbody>
+            </table>
+          </article>
+        </div>
+      </div>
+
+      <div class="tile is-ancestor">
+        <div class="tile is-parent">
+          <article class="tile is-child box">
+            <p class="title">System on line</p>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>From</th>
+                  <th>To</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#onlineLog}}
+                <tr>
+                  <td>{{formatDateTimeDoNotRepeatDate(this[0])}}</td><td>{{formatDateTimeDoNotRepeatDate(this[1])}}</td>
+                </tr>
+                {{/onlineLog}}
+              </tbody>
+            </table>
+          </article>
+        </div>
+      </div>
+
+
+      <div class="tile is-ancestor">
+        <div class="tile is-parent">
+          <article class="tile is-child box">
+            <p class="title">GPS</p>
+            <table class="table">
+              <thead>
+                <tr> <th>Time</th> <th>Duration</th> <th>Type</th> <th>Lat</th> <th>Lon</th> </tr>
+              </thead>
+              <tbody>
+                {{#gpslog}}
+                <tr>
+                  <td>{{formatDateTimeDoNotRepeatDate(t0)}}</td><td>{{parseInt((t1-t0)/1000)}}</td><td>{{type}}</td><td>{{lat}}</td><td>{{lon}}</td>
+                </tr>
+                {{/gpslog}}
+              </tbody>
+            </table>
+          </article>
+        </div>
+      </div>
+
+
+        <a class="button is-info" on-click="['downloadLocalStorage']">Download local storage</a>
+        <a class="button is-danger" on-click="['deleteLocalStorage']">Delete local storage</a>
+
+    </script>
+
+    <script language="javascript" type="text/javascript">
+      var onlinelog=[]
+      var gpslog;
+
+      const NUMBEROFSAMPLES=16384;
+      var karvo;
+      var drawgeigersignal;
+
+      function downloadFile(filename,mime,data){
+        // Set up the link
+        var link = document.createElement("a");
+        link.setAttribute("target","_blank");
+        if(Blob !== undefined) {
+            var blob = new Blob([data], {type: mime});
+            link.setAttribute("href", URL.createObjectURL(blob));
+        } else {
+          link.setAttribute("href",mime+"," + encodeURIComponent(data));
+        }
+        link.setAttribute("download",filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      function gotDevices(deviceInfos) {
+        let infomap={}
+        for(let dinfo of deviceInfos){
+          if (infomap[dinfo.kind]==undefined){
+            infomap[dinfo.kind]=[]
+          }
+          infomap[dinfo.kind].push(dinfo)
+        }
+        if (infomap.audioinput!=undefined){
+          if (infomap.audioinput.length==0){
+            ractive.set("selectedDeviceId","")
+          }else{
+            ractive.set("selectedAudioDeviceId",infomap.audioinput[0].deviceId)
+          }
+        }
+        ractive.set("deviceInfos",infomap)
+      }
+
+      function handleError(error) {
+        console.error('Error: ', error);
+      }
+
+      navigator.mediaDevices.enumerateDevices().then(gotDevices).catch(handleError);
+
+      var ractive = new Ractive({
+        el: '#container',
+        template: '#template', /*,
+        partials:{
+          PageConnections:PageConnections,
+          PageSub:PageSub,
+          PagePub:PagePub,
+          PageDownloads:PageDownloads,
+          PageSubscription:PageSubscription,
+          PageMain:PageMain,
+          PageIPFS:PageIPFS
+        },*/
+
+        /*
+        loginMqtt:function(){
+          makeMqttConnection();
+        },
+        logoutMqtt:function(){
+          enableRetrys(false)
+          client.disconnect()
+        },
+        */
+        data:{
+          formatToFixed:function(f,decimals){
+            return parseFloat(f.toFixed(decimals)).toString()
+          },
+          formatDateTimeDoNotRepeatDate:function(epoch){ //Vain muuttuneet tiedot nykypäivämäärään nähden
+            let d=new Date(epoch)
+            let epochnow=new Date().getTime()
+            let time24hformat=d.getHours() + ":" +  ('0'  + d.getMinutes()).slice(-2) +":"+ ('0'  + d.getSeconds()).slice(-2)
+
+            if ( (d.getDate()==new Date(epochnow).getDate()) && (d.getMonth()==new Date(epochnow).getMonth()) && (d.getYear()==new Date(epochnow).getYear()) ) {
+              return time24hformat //Just time needed, date is same
+            }
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            //Without year if year is same
+            let withoutYear= monthNames[d.getMonth()]+" "+d.getDate()+" "+time24hformat
+            if (d.getYear()==new Date(epochnow).getYear()){
+              return withoutYear
+            }
+            return d.getFullYear()+" "+withoutYear
+          },
+          display:{cpm:0,averagetime:""},
+          pointCounter:0,
+          capturing:false,
+          settings:{
+            decayfactor:0.01,
+            downth:0.33,
+            upth:0.5,
+            averageTime:10, //This is in seconds
+            cpmDisplayMax:2500
+          }
+          /*,
+          calibrations:{//Key is what kind of calibration (isotope etc... ) value   factor*cpm when counts=false, else factor*counts gives dose
+            "Am-241_ionization":[{factor:0.5,counts:true,unit:"u röntgen",t:"1561874326005"},{factor:0.05*60,counts:false,unit:"u röntgen/h"}],
+            "Am-241_sieverts":[{factor:1.5,counts:true,unit:"uSievert",t:"1561874326005"},{factor:1.5,counts:false,unit:"uSievert/h"}]
+          }
+          */
+        }
+      })
+
+
+      //Settings etc..
+      function restoreFromLocalStorage(){
+        if(localStorage.geigerSettings==undefined){
+          //Restoring as default
+          localStorage.geigerSettings=JSON.stringify({decayfactor:0.01, downth:0.33, upth:0.5, averageTime:5,cpmDisplayMax:2500}) //TODO Average time is index
+        }
+
+        ractive.set("settings",JSON.parse(localStorage.geigerSettings))
+        if(localStorage.geigerCumulatives==undefined){
+
+        }else{
+          ractive.set("pulseStatus.cumulatives",JSON.parse(localStorage.geigerCumulatives))
+        }
+      }
+
+      restoreFromLocalStorage()
+
+
+      ractive.observe( 'settings', function ( newValue, oldValue, keypath ) {
+        localStorage.geigerSettings=JSON.stringify(newValue)
+        console.log("settings Changed to "+JSON.stringify(newValue))
+
+        let indexes=redrawRealtimePlot(newValue);
+        console.log("Peak indexes after change are "+JSON.stringify(indexes))
+      })
+
+
+      var audioContext;
+      var latestData;
+      var sampleRate;
+
+      function redrawRealtimePlot(set){
+        const canv = document.getElementById('piirros');
+        const ctx = canv.getContext('2d');
+
+        if (drawgeigersignal==undefined){
+          console.log("drawgeigersignal is not defined yet")
+          return
+        }
+        //console.log("Drawing with pars  set.decayfactor="+set.decayfactor+"  set.downth="+set.downth+"   set.upth="+set.upth)
+        return drawgeigersignal(ctx,canv.width,canv.height,latestData,set.decayfactor,set.downth,set.upth);
+      }
+
+
+
+      var listener = ractive.on({
+        downloadLocalStorage(){
+          let doc={ //PAska locastorage ei ossoo ku strinkejä
+            gps:JSON.parse(localStorage.geigerGpsLog),
+            settings:JSON.parse(localStorage.geigerSettings),
+            cumulatives:JSON.parse(localStorage.geigerCumulatives),
+            online:JSON.parse(localStorage.geigerOnlineLog)
+          }
+          let t=new Date().getTime()
+          downloadFile("geiger"+t+".json" ,"application/json",JSON.stringify(doc))
+        },
+        deleteLocalStorage(){
+          localStorage.clear()
+        },
+
+        downloadAsText:function(){
+          downloadFile("sound.csv","text/plain",latestData.join("\n"))
+        },
+        enumUSBs:function(e){
+          navigator.usb.getDevices().then(devices => {
+            console.log("Total devices: " + devices.length);
+            devices.forEach(device => {
+              console.log("Product name: " + device.productName + ", serial number " + device.serialNumber);
+            });
+          });
+        },
+        stopCapture: function (e) {
+          console.log("Stop capture")
+          audioContext.close().then(function() {
+            console.log("SULJETTU")
+            ractive.set("capturing",false)
+          })
+        },
+        startCapture: function(e) {
+          if (localStorage.geigerOnlineLog!=undefined){
+            onlinelog=JSON.parse(localStorage.geigerOnlineLog)
+          }
+
+          onlinelog=sessionStartsNow(new Date().getTime(),onlinelog)
+          localStorage.geigerOnlineLog=JSON.stringify(onlinelog)
+          ractive.set("onlineLog",onlinelog)
+
+          console.log("Start capture")
+          console.log("Checking constraints")
+          navigator.mediaDevices.getUserMedia({audio:{deviceId:ractive.get("selectedAudioDeviceId")} }).then(function(stream){
+            ractive.set("capturing",true)
+
+            audioContext = new AudioContext();
+            var source = audioContext.createMediaStreamSource(stream);
+            var processor = audioContext.createScriptProcessor(NUMBEROFSAMPLES, 2, 2);
+
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+            sampleRate=audioContext.sampleRate;
+            console.log("Sample rate is "+sampleRate);
+            initializePulseCounter(sampleRate,NUMBEROFSAMPLES);
+
+            navigator.geolocation.watchPosition(
+              function success(pos) {
+                console.log("Success position is "+JSON.stringify(pos.coords.latitude)+" at "+new Date(pos.timestamp))
+                gpslog=updateGeolocationsLog(gpslog,pos.coords,pos.timestamp)
+                console.log("GPS log is now "+JSON.stringify(gpslog))
+                ractive.set("gpslog",gpslog)
+                localStorage.geigerGpsLog=JSON.stringify(gpslog)
+              },
+              function(err) {console.warn('ERROR(' + err.code + '): ' + err.message);}
+            , {enableHighAccuracy: false,timeout: 5000,maximumAge: 0});
+
+            /*navigator.geolocation.getCurrentPosition(function(pos){
+              console.log("position is "+JSON.stringify(pos))
+            })
+            */
+
+
+            processor.onaudioprocess = function(e) {
+              // Do something with the data, i.e Convert this to WAV
+              //  console.log(e.inputBuffer);
+              let data=JSON.parse("["+e.inputBuffer.getChannelData(0).toString()+"]")
+              latestData=data
+
+              indexArr=redrawRealtimePlot(ractive.get("settings"));
+              processPulses(indexArr,new Date().getTime());
+              ractive.set("pulseStatus",pulseStatus)
+              //ractive.set("pulseCount",calcBoolPulses(pulsed))
+
+              //console.log("buffer have "+pulseStatus.bufTimeLen/1000+" seconds of pulses")
+              //Update activity
+
+              //Limite update interval
+              if ( ONLINELOGACCURACY < (new Date().getTime()-onlinelog[onlinelog.length-1][1]) ){
+                console.log("onlinelog is "+JSON.stringify(onlinelog))
+                onlinelog=sessionRunsNow(new Date().getTime(),onlinelog)
+                localStorage.geigerOnlineLog=JSON.stringify(onlinelog)
+                ractive.set("onlineLog",onlinelog)
+              }
+
+              localStorage.geigerCumulatives=JSON.stringify(pulseStatus.cumulatives)
+              //TODO calc calibs here
+              let settings=ractive.get("settings")
+              ractive.set("display",{
+                "cpm":Math.floor(pulseStatus.cpm[settings.averageTime].cpm),averagetime:pulseStatus.cpm[settings.averageTime].avg
+              })
+            };
+          });
+        }
+      })
+
+
+
+      /*
+      navigator.geolocation.getCurrentPosition(function(pos){
+        console.log("position is "+JSON.stringify(pos))
+        if (pos.coords!=undefined){
+          if (ractive.get("newPubPayloadFormat")=="raw"){
+            ractive.set("newPubPayload",pos.coords.latitude + "," + pos.coords.longitude)
+          }else{
+            ractive.set("newPubPayload",JSON.stringify(
+            {latitude:pos.coords.latitude,
+              longitude:pos.coords.longitude,
+              accuracy:pos.coords.accuracy,
+              altitude:pos.coords.altitude,
+              altitudeAccuracy:pos.coords.altitudeAccuracy,
+              heading:pos.coords.heading,
+              speed:pos.coords.speed
+            }))
+          }
+        }
+      })
+    },1000);
+    */
+
+
+    </script>
+
+
+
+    <!-- Note the usage of `type=module` here as this is an ES6 module -->
+    <script type="module">
+      // Use ES module import syntax to import functionality from the module
+      // that we have compiled.
+      //
+      // Note that the `default` import is an initialization function which
+      // will "boot" the module and make it ready to use. Currently browsers
+      // don't support natively imported WebAssembly as an ES module, but
+      // eventually the manual initialization won't be required!
+
+      import init, { processgeigersignal,drawgeigersignalplot } from './pkg/bingen.js';
+
+
+      async function run() {
+        // First up we need to actually load the wasm file, so we use the
+        // default export to inform it where the wasm file is located on the
+        // server, and then we wait on the returned promise to wait for the
+        // wasm to be loaded.
+        // It may look like this: `await init('./pkg/without_a_bundler_bg.wasm');`,
+        // but there is also a handy default inside `init` function, which uses
+        // `import.meta` to locate the wasm file relatively to js file
+        //
+        // Note that instead of a string here you can also pass in an instance
+        // of `WebAssembly.Module` which allows you to compile your own module.
+        // Also note that the promise, when resolved, yields the wasm module's
+        // exports which is the same as importing the `*_bg` module in other
+        // modes
+        console.log("waiting init");
+        await init();
+
+        drawgeigersignal=drawgeigersignalplot;
+      }
+
+      run();
+    </script>
+  </body>
+</html>
