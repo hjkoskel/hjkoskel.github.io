@@ -35,8 +35,13 @@
 
       <br>
       <a class="button" on-click="['downloadAsText']">download signal as text</a>
-
-
+      <br>Test csv upload
+      <input type='file' value='{{testFileUploadList}}'/>
+      {{#if 0<testFileUploadList.length}}
+        <a class="button" on-click="['runTestData']">run test data</a>
+        <br>
+        {{JSON.stringify(testIndexes)}}
+      {{/if}}
       <div class="tile is-ancestor">
         <div class="tile is-parent">
           <article class="tile is-child box">
@@ -266,6 +271,7 @@
             }
             return d.getFullYear()+" "+withoutYear
           },
+          testIndexes:[],
           display:{cpm:0,averagetime:""},
           pointCounter:0,
           capturing:false,
@@ -332,7 +338,27 @@
       const AVGOPTIONS=[1,5,10,15,20,25,30,35,40,45,50,55,60]
       ractive.set("avgoptions",AVGOPTIONS) //Set here ,prevent stupid blinking dialog on mobile
       var listener = ractive.on({
-        downloadLocalStorage(){
+        runTestData:function(){
+          let filelist=ractive.get("testFileUploadList");
+          for(var fileItem of filelist){
+            console.log("Going to test file " + fileItem.name)
+            var fReader = new FileReader();
+            fReader.onload=function(evt){
+              console.log("onload evt="+JSON.stringify(evt))
+
+              let s=evt.target.result
+              latestData=evt.target.result.split("\n")
+              //Run analysis and plot
+
+
+              indexArr=redrawRealtimePlot(ractive.get("settings"));
+              ractive.set("testIndexes",indexArr)
+              console.log("index arr from sim is "+JSON.stringify(indexArr))
+            }
+            fReader.readAsText(fileItem)
+          }
+        },
+        downloadLocalStorage:function(){
           let doc={ //PAska locastorage ei ossoo ku strinkejä
             gps:JSON.parse(localStorage.geigerGpsLog),
             settings:JSON.parse(localStorage.geigerSettings),
@@ -342,7 +368,7 @@
           let t=new Date().getTime()
           downloadFile("geiger"+t+".json" ,"application/json",JSON.stringify(doc))
         },
-        deleteLocalStorage(){
+        deleteLocalStorage:function(){
           localStorage.clear()
         },
 
@@ -380,7 +406,7 @@
 
             audioContext = new AudioContext();
             var source = audioContext.createMediaStreamSource(stream);
-            var processor = audioContext.createScriptProcessor(NUMBEROFSAMPLES, 2, 2);
+            var processor = audioContext.createScriptProcessor(NUMBEROFSAMPLES, 1, 1);
 
             source.connect(processor);
             processor.connect(audioContext.destination);
