@@ -331,6 +331,10 @@
           console.log("drawgeigersignal is not defined yet")
           return
         }
+        if (latestData==undefined){
+          console.log("drawgeigersignal is not defined yet")
+          return
+        }
         //console.log("Drawing with pars  set.decayfactor="+set.decayfactor+"  set.downth="+set.downth+"   set.upth="+set.upth)
         return drawgeigersignal(ctx,canv.width,canv.height,latestData,set.decayfactor,set.downth,set.upth);
       }
