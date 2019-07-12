@@ -31,6 +31,8 @@ https://github.com/nodeca/pako/tree/master/dist
 
 <script src="./thirdparty/pako.min.js"></script>
 
+<script src="./thirdparty/qrious.min.js"></script>
+
 </head>
 <body>
 
@@ -53,6 +55,12 @@ https://github.com/nodeca/pako/tree/master/dist
               {{else}}
                 <li><a on-click="['toPage','connections']">Connections</a></li>
               {{/if}}
+              {{#if uipage=="qrscan"}}
+                <li><a class="is-active">qrscan</a></li>
+              {{else}}
+                <li><a on-click="['toPage','qrscan']">qrscan</a></li>
+              {{/if}}
+
               {{#if uipage=="sub"}}
                 <li><a class="is-active">Sub</a></li>
               {{else}}
@@ -117,6 +125,9 @@ https://github.com/nodeca/pako/tree/master/dist
             {{#if uipage=="main"}}
               {{>PageMain}}
             {{/if}}
+            {{#if uipage=="qrscan"}}
+              {{>PageQRScan}}
+            {{/if}}
 
         </div>
       </section>
@@ -132,8 +143,9 @@ https://github.com/nodeca/pako/tree/master/dist
   <script src='page_downloads.js'> </script>
   <script src='page_subscription.js'> </script>
   <script src='page_main.js'> </script>
+  <script src='page_qrscan.js'> </script>
 
-  <script src='./page_ipfs.js'> </script>
+  <script src='page_ipfs.js'> </script>
 
 	<script language="javascript" type="text/javascript">
 
@@ -295,9 +307,9 @@ https://github.com/nodeca/pako/tree/master/dist
       PageDownloads:PageDownloads,
       PageSubscription:PageSubscription,
       PageMain:PageMain,
-      PageIPFS:PageIPFS
+      PageIPFS:PageIPFS,
+      PageQRScan:PageQRScan
     },
-
     loginMqtt:function(){
       makeMqttConnection();
     },
@@ -347,6 +359,7 @@ https://github.com/nodeca/pako/tree/master/dist
         }
         return d.getFullYear()+" "+withoutYear
       },
+      "newSettingsQRuri":"",
       "connectionSettings":{hostname:"192.168.1.101",port:9001,useSSL: false,username:"",password:""},
       "connectionMessages":[],
       "uipage":"main",
@@ -365,7 +378,8 @@ https://github.com/nodeca/pako/tree/master/dist
       "ipfsAddResult":[],
       "connections":{},
       "connectionStatus":{},
-      "recieved":{}
+      "recieved":{},
+      "newConn":{"name": "", "hostname": "", "username": "", "password": "", "useSSL": false, "autoconnect": false, "port": 0}
     }
   })
 
@@ -510,14 +524,23 @@ https://github.com/nodeca/pako/tree/master/dist
     ractive.set("activeCamera",false)
   }
 
+  function goToPage(pagename){
+    ractive.set("uipage",pagename)
+    ractive.set("selectedTopic","")
+    ractive.set("publishErrorMessage","")
+    stopCamera()
+
+    lopetaQR()
+    if(pagename=="qrscan"){
+      kuvaaQR();
+    }
+
+    navigator.mediaDevices.enumerateDevices().then(gotDevices).catch(handleError);
+  }
 
   var listener = ractive.on({
   	toPage: function (e,pagename) {
-      ractive.set("uipage",pagename)
-      ractive.set("selectedTopic","")
-      ractive.set("publishErrorMessage","")
-      stopCamera()
-      navigator.mediaDevices.enumerateDevices().then(gotDevices).catch(handleError);
+      goToPage(pagename);
   	},
     toSubscription:function (e,selectedConnection,topic){
       ractive.set("selectedConnection",selectedConnection)
@@ -532,7 +555,12 @@ https://github.com/nodeca/pako/tree/master/dist
       ractive.set("subscriptionErrorMessage","")
       ractive.set("publishErrorMessage","")
     },
-
+    getQRcode:function(){
+      let s=JSON.stringify(ractive.get("newConn"))
+      console.log("todo hae qrcode="+s)
+      var qr = new QRious({value: s,size:350});
+      ractive.set("newSettingsQRuri",qr.toDataURL());
+    },
     unsubscribe:function(e,connectionName,topicName){
       let a=ractive.get("connections")
       delete(a[connectionName].topics[topicName])
@@ -1031,7 +1059,131 @@ function dataURItoArrayBuffer(dataURI){
 
 navigator.mediaDevices.enumerateDevices().then(gotDevices).catch(handleError);
 
+function updateIpfsRepoStat(){
+  if (ipfsNode){
+    ipfsNode.repo.stat({},function(err,stats){
+      if (err) {
+        ractive.set("ipfsError","IPFS REPO ERROR: "+err)
+        return
+      }
+      let sta=ractive.get("ipfsStatus")
+      sta.repoStats=stats
+      ractive.set("ipfsStatus",sta)
+    })
+  }
+}
+
+function updateIpfsPeersList(){
+  if (ipfsNode){
+    ipfsNode.swarm.peers(function (err, addrs) {
+      if (err) {
+        ractive.set("ipfsError","IPFS PEERS ERROR: "+err)
+        return
+      }
+      let lst=[]
+      for(let a of addrs){
+        lst.push(a.addr.toString())
+      }
+      let sta=ractive.get("ipfsStatus")
+      sta.peers=lst
+      ractive.set("ipfsStatus",sta)
+    })
+  }
+}
+
+// https://js.ipfs.io/
+function addDataToIpfs(data,fDone){
+  console.log("Adding data to IPFS")
+  let buf=ipfsNode.Buffer.from(data);
+  console.log("buffer size is "+buf.length)
+  ipfsNode.add(buf,{},function (err, res){
+    if (err!=undefined){
+      ractive.set("textAddResult","ERROR: "+JSON.stringify(err))
+    }else{
+      //ractive.set("textAddResult",JSON.stringify(res))
+      console.log("Add result "+JSON.stringify(res))
+      //Assuming only one file added
+      if (res.length!=1){
+        console.log("TODO ERRROR???")
+        return
+      }
+      oneHash=res[0].hash
+      console.log("fdone returns with "+oneHash)
+      fDone(oneHash)
+    }
+  })
+}
 //makeMqttConnection()
+
+//ES6 modulit, pitää opetella käyttää. Nyt häxi. Ractiven vois suosiolla luiskata pois käytöstä
+var kuvaaQR
+var lopetaQR
 </script>
+
+<script type="module">
+  import QrScanner from "./thirdparty/qr-scanner.min.js";
+  QrScanner.WORKER_PATH = './thirdparty/qr-scanner-worker.min.js';
+
+  var scanner
+
+  kuvaaQR=function (){
+      const video = document.getElementById('qr-video');
+      scanner = new QrScanner(video, result => {
+        console.log("SCANNED"+result)
+        let scanned={}
+        try{
+          scanned=JSON.parse(result)
+          let conn=ractive.get("newConn")
+
+          //Only defined values
+          if (scanned.name!=undefined){
+            conn.name=scanned.name
+          }
+          if (scanned.hostname!=undefined){
+            conn.hostname=scanned.hostname
+          }
+          if (scanned.username!=undefined){
+            conn.username=scanned.username
+          }
+          if (scanned.password!=undefined){
+            conn.password=scanned.password
+          }
+          if (scanned.useSSL!=undefined){
+            conn.useSSL=scanned.useSSL
+          }
+          if (scanned.autoconnect!=undefined){
+            conn.autoconnect=scanned.autoconnect
+          }
+          if (scanned.port!=undefined){
+            conn.port=scanned.port
+          }
+          /*
+          name
+          hostname
+          username
+          password
+          useSSL
+          autoconnect
+          port
+          */
+          ractive.set("newConn",conn)
+          goToPage("connections")
+        }catch(e){
+          console.log("invalid QR code scan "+JSON.stringify(e))
+        }
+      });
+      scanner.start();
+      scanner.setInversionMode("both");
+  }
+  lopetaQR=function(){
+    console.log("trying to destroy scanner")
+    if (typeof scanner !== 'undefined') {
+      scanner.destroy();
+      scanner = null;
+      scanner = undefined;
+    }
+  }
+</script>
+
 </body>
 </html>

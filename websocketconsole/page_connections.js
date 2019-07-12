@@ -61,7 +61,7 @@ var PageConnections=`
     <div class="field">
       <label class="label">Connection name</label>
       <div class="control">
-        <input class="input" type="text" placeholder="hostname" value={{newConn.name}}>
+        <input class="input" type="text" placeholder="connection name" value={{newConn.name}}>
       </div>
       <p class="help">unique name</p>
     </div>
@@ -123,6 +123,12 @@ var PageConnections=`
   </fieldset>
   </form>
 
+  <p class="control">
+    <label class="label">New connection as qrcode</label>
+    <a class="button is-primary" on-click="['getQRcode']"> getQRcode </a>
+  </p>
+  <a href="{{newSettingsQRuri}}">Qrcode uri link</a>
+  <img src="{{newSettingsQRuri}}" width="50%" height="50%"/>
 
 
 </div>
