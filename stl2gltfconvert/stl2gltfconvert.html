@@ -1,0 +1,534 @@
+<html>
+<head>
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
+  <script src="https://cdn.jsdelivr.net/npm/ractive"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.5/css/bulma.css">
+  <script src="gltfconversions.js"></script>
+</head>
+<body>
+
+  <div id='container'></div>
+
+  <script id='template' type='text/ractive'>
+
+    processing
+    <progress min="0" max="{{progress.total}}" value="{{progress.done}}"/>
+
+    <div class="tile is-ancestor">
+      <div class="tile is-parent">
+        <article class="tile is-child box">
+          <p class="title">Instances</p>
+
+          <a class="button is-primary" on-click="['downloadAllGlb']">Download all visible in glb</a>
+          <a class="button is-primary" on-click="['downloadAllGltf']">Download all visible only gltf part</a>
+          <!---
+          <a class="button is-primary" on-click="['downloadAllGltfStandalone']">Download all visible only gltf part (standalone)</a>
+          --->
+          <table class="table">
+            <thead>
+              <tr>
+                <th>modeldata_name</th>
+                <th>name</th>
+                <th>visible</th>
+                <th>material_name</th>
+                <th>rotation</th>
+                <th>scale</th>
+                <th>translation</th>
+                <th>download</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#instances:name}}
+                <tr>
+                  <th>{{modeldata_name}}</th>
+                  <td> <a class="button is-danger" on-click="['deleteInstance',name]">Delete {{name}}</a> </td>
+                  <td> <input class="checkbox" type="checkbox" on-change="['visibilitychange',name]" checked="{{visible}}"/> </td>
+                  <td>
+                    <div class="select">
+                      <select value="{{material_name}}">
+                        {{#materials:matName}}
+                          <option value="{{matName}}">{{matName}}</option>
+                        {{/materials}}
+                      </select>
+                    </div>
+                  </td>
+                  <td>
+                    <ul>
+                      <li><input class="input" type="number" step="0.001" value="{{rotation[0]}}"/> </li>
+                      <li><input class="input" type="number" step="0.001" value="{{rotation[1]}}"/></li>
+                      <li><input class="input" type="number" step="0.001" value="{{rotation[2]}}"/></li>
+                      <li><input class="input" type="number" step="0.001" value="{{rotation[3]}}"/></li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul>
+                      <li><input class="input" type="number" step="0.001" value="{{scale[0]}}"/> </li>
+                      <li><input class="input" type="number" step="0.001" value="{{scale[1]}}"/></li>
+                      <li><input class="input" type="number" step="0.001" value="{{scale[2]}}"/></li>
+                    </ul>
+                  </td>
+                  <td>
+                    <ul>
+                      <li><input class="input" type="number" step="0.001" value="{{translation[0]}}"/> </li>
+                      <li><input class="input" type="number" step="0.001" value="{{translation[1]}}"/></li>
+                      <li><input class="input" type="number" step="0.001" value="{{translation[2]}}"/></li>
+                    </ul>
+                  </td>
+                  <td>
+                    <!---
+                    <a class="button is-primary" on-click="['downloadSingleStandaloneGltf',name]">standalone gltf</a> <br/>
+                    --->
+                    <a class="button is-primary" on-click="['downloadSingleGltf',name]">gltf</a> <br/>
+                    <a class="button is-primary" on-click="['downloadSingleVertexes',name]">vertexes</a> <br/>
+                    <a class="button is-primary" on-click="['downloadSingleNormals',name]">normals</a> <br/>
+                    <a class="button is-primary" on-click="['downloadSingleIndexes',name]">indexes</a> <br/>
+                  </td>
+                </tr>
+              {{/instances}}
+            </tbody>
+          </table>
+
+          <div class="field">
+            <label class="label">Add instance</label>
+            <div class="control select">
+              <select value="{{addingmodel.modeldata_name}}">
+                {{#stlFiles:name}}
+                  <option value="{{name}}">{{name}}</option>
+                {{/stlFiles}}
+              </select>
+            </div>
+            <label class="label">Named as</label>
+            <div class="control">
+              <input class="input" type="text" value="{{addingmodel.name}}"/>
+            </div>
+            {{#if 0<addingmodel.name.length}}
+              <a class="button is-success" on-click="['addmodel',addingmodel]">Add model {{addingmodel.stl}} as {{addingmodel.modeldata_name}}</a>
+            {{else}}
+              <a class="button is-success" disabled>Add model (insert name)</a>
+            {{/if}}
+          </div>
+        </article>
+      </div>
+    </div>
+
+
+    <div class="tile is-ancestor">
+      <div class="tile is-parent">
+        <article class="tile is-child box">
+          <p class="title">STL files</p>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Delete</th>
+                <th>Vertex filename</th>
+                <th>Normal filename</th>
+                <th>Index filename</th>
+                <!---
+                <th>Rotation</th>
+                <th>Scale</th>
+                <th>Translation</th>
+                ---->
+              </tr>
+            </thead>
+            <tbody>
+              {{#stlFiles:filename}}
+              <tr>
+                <th>{{filename}}</th>
+                <td> <a class="button is-danger" on-click="['deleteStl',filename]">Delete {{filename}}</a> </td>
+                <td> <input class="input" type="text" value="{{vertex_filename}}"/> </td>
+                <td> <input class="input" type="text" value="{{normal_filename}}"/> </td>
+                <td> <input class="input" type="text" value="{{index_filename}}"/> </td>
+              </tr>
+              {{/stlFiles}}
+            </tbody>
+          </table>
+        </article>
+      </div>
+    </div>
+
+    <div class="tile is-ancestor">
+      <div class="tile is-parent">
+        <article class="tile is-child box">
+          <p class="title">Upload STL</p>
+          <input class="button" type='file' value='{{fileUploadList}}'/>
+          {{#if 0<fileUploadList.length}}
+            MIME is {{fileUploadList[0].type}}
+          {{/if}}
+
+
+        </article>
+      </div>
+    </div>
+
+    <div class="tile is-ancestor">
+      <div class="tile is-parent">
+        <article class="tile is-child box">
+          <p class="title">Materials</p>
+
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Base Color</th>
+                <th>Metallic</th>
+                <th>Roughness</th>
+                <th>Emissive Factor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#materials:name}}
+                <tr>
+                  <th>{{name}}
+                    <a class="button is-danger" on-click="['deleteMaterial',name]">Delete {{newmaterialname}}</a>
+                  </th>
+                  <td>
+                    <ul>
+                      <li>R:<input class="input" type="number" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.baseColorFactor[0]}}"/> <input type="range" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.baseColorFactor[0]}}"/> </li>
+                      <li>G:<input class="input" type="number" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.baseColorFactor[1]}}"/> <input type="range" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.baseColorFactor[1]}}"/> </li>
+                      <li>B:<input class="input" type="number" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.baseColorFactor[2]}}"/> <input type="range" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.baseColorFactor[2]}}"/> </li>
+                      <li>A:<input class="input" type="number" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.baseColorFactor[3]}}"/> <input type="range" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.baseColorFactor[3]}}"/> </li>
+                    </ul>
+                  </td>
+                  <td>
+                    <input class="input" type="number" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.metallicFactor}}"/>
+                    <input type="range" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.metallicFactor}}"/>
+                  </td>
+                  <td>
+                    <input class="input" type="number" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.roughnessFactor}}"/>
+                    <input type="range" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.roughnessFactor}}"/>
+                  </td>
+
+                  <td>
+                    <ul>
+                      <li>R:<input class="input" type="number" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.emissiveFactor[0]}}"/> <input type="range" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.emissiveFactor[0]}}"/> </li>
+                      <li>G:<input class="input" type="number" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.emissiveFactor[1]}}"/> <input type="range" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.emissiveFactor[1]}}"/> </li>
+                      <li>B:<input class="input" type="number" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.emissiveFactor[2]}}"/> <input type="range" min="0" max="1" step="0.001" value="{{pbrMetallicRoughness.emissiveFactor[2]}}"/> </li>
+                    </ul>
+                  </td>
+                </tr>
+              {{/materials}}
+              <tr>
+                {{#if 0<newmaterialname.length}}
+                  <td><a class="button is-primary" on-click="['addNewMaterial']">Add {{newmaterialname}}</a></td>
+                {{else}}
+                  <td><a class="button is-primary" disabled>Add new material (enter materialname)</a></td>
+                {{/if}}
+                <td><input class="input" type="text" value="{{newmaterialname}}"/></td>
+              </tr>
+            </tbody>
+          </table>
+
+
+        </article>
+      </div>
+    </div>
+  </script>
+
+  <script language="javascript" type="text/javascript">
+
+    var isonnafunktio;
+    var oottelukoe;
+    var wasm_convertStlData;
+    var wasm_convertToGlb;
+
+    function downloadFile(filename,mime,data){
+      // Set up the link
+      var link = document.createElement("a");
+      link.setAttribute("target","_blank");
+      if(Blob !== undefined) {
+        var blob = new Blob([data], {type: mime});
+        link.setAttribute("href", URL.createObjectURL(blob));
+      } else {
+        link.setAttribute("href",mime+"," + encodeURIComponent(data));
+      }
+      link.setAttribute("download",filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    var ractive = new Ractive({
+      el: '#container',
+      template: '#template',
+      data:{
+        formatToFixed:function(f,decimals){
+          return parseFloat(f.toFixed(decimals)).toString()
+        },
+        //koe:"joo toimii",
+        progress:{done:53,total:152},
+        stlFiles:{
+          "ekaosa":{ //by modeldata_name. Must be unique
+            vertex_filename:"ekaosa_vertexes.bin", //autofilled
+            normal_filename:"ekaosa_normals.bin",
+            index_filename:"ekaosa_indexes.bin",
+          }
+        },
+        instances:{ //One export can have multiple copies with different materials
+          "juttu":{
+            visible:true,
+            modeldata_name:"ekaOsa", //There can be multiple exports of same modeldata with different material, scaling etc...
+            material_name:"matsku",
+            rotation:[ 0.0, 0.0, 0.0, 1.0 ],
+            scale:[1.0,1.0,1.0],
+            translation:[0.0,0.0,0.0]
+          }
+        },
+        materials:{
+          "matsku":{
+            pbrMetallicRoughness : {
+              baseColorFactor : [ 0.5, 0.3, 0.9, 1.0 ],
+              metallicFactor: 0.9,
+              roughnessFactor: 0.7,
+              emissiveFactor : [ 0.2, 0.1, 0.0 ]
+            }
+          }
+        }
+      }
+    })
+
+    function onErrorUpdate(msg){
+      console.log(msg)
+    }
+
+    var listener = ractive.on({
+      exportkoe:function(){
+        console.log("TODO todo exporttaa");
+      },
+      addNewMaterial:function(){
+        let materialname=ractive.get("newmaterialname")
+        console.log("TODO add material "+materialname)
+
+        let materials=ractive.get("materials")
+        if (materials==undefined){
+          materials={}
+        }
+        if(materials[materialname]!=undefined){
+          console.log("Material "+materialname+" already in lib")
+          return
+        }
+        materials[materialname]={
+          pbrMetallicRoughness : {
+            baseColorFactor : [ 0.5, 0.3, 0.9, 1.0 ],
+            metallicFactor: 0.9,
+            roughnessFactor: 0.7,
+            emissiveFactor : [ 0.2, 0.1, 0.0 ]
+          }
+        }
+        ractive.set("materials",materials)
+      },
+      downloadAllGlb:function(){
+        console.log("TODO download glb")
+        wa_GetGlbFil(
+          "todoname",
+          ractive.get("instances"),
+          ractive.get("materials"),
+          onProgressUpdate,
+          onErrorUpdate,
+          function(glbdata){
+            downloadFile("todo.glb","model/gltf-binary",glbdata)
+          }
+        )
+      },
+      downloadAllGltfStandalone:function(){
+        console.log("TODO download all gltf with uri")
+        wa_GetGlftFil(
+          "todoname",
+          ractive.get("instances"),
+          ractive.get("materials"),
+          false,
+          onProgressUpdate,
+          onErrorUpdate,
+          function(gltfdata){
+            downloadFile("todo.gltf","model/gltf+json",gltfdata)
+          }
+        )
+      },
+      downloadAllGltf:function(){
+        console.log("TODO download all gltf")
+        wa_GetGlftFil(
+          "todoname",
+          ractive.get("instances"),
+          ractive.get("materials"),
+          false,
+          onProgressUpdate,
+          onErrorUpdate,
+          function(glbdata){
+            downloadFile("todo.gltf","model/gltf+json",gltfdata)
+          }
+        )
+      },
+      visibilitychange:function(ev,name){
+        console.log("TODO visibilitychange on "+name)
+        console.log("only if building model required")
+      },
+      downloadSingleGltf:function(ev,name){
+        console.log("TODO generate single gltf "+name)
+        let inst=ractive.get("instances")[name]
+        if(inst == undefined){
+          console.log("TODO instance "+name+" not found")
+          return
+        }
+        wa_GetGlftFil(
+          "todoname",
+          inst,
+          ractive.get("materials"),
+          false,
+          onProgressUpdate,
+          onErrorUpdate,
+          function(gltfdata){
+            downloadFile("todo.gltf","model/gltf+json",gltfdata)
+          }
+        )
+      },
+
+      downloadSingleStandaloneGltf:function(ev,name){
+        console.log("TODO generate standalone gltf (URI)")
+        let inst=ractive.get("instances")[name]
+        if(inst == undefined){
+          console.log("TODO instance "+name+" not found")
+          return
+        }
+        wa_GetGlftFil(
+          "todoname",
+          inst,
+          ractive.get("materials"),
+          true,
+          onProgressUpdate,
+          onErrorUpdate,
+          function(gltfdata){
+            downloadFile("todo.gltf","model/gltf+json",gltfdata)
+          }
+        )
+      },
+      downloadSingleVertexes:function(ev,name){
+        console.log("TODO generate single vertexes")
+      },
+      downloadSingleNormals:function(ev,name){
+        console.log("TODO generate single normals")
+      },
+      downloadSingleIndexes:function(ev,name){
+        console.log("TODO generate single indexes")
+      },
+
+      addmodel:function(ev,modelinfo){
+        console.log("TODO add model "+JSON.stringify(modelinfo))
+        let instances=ractive.get("instances")
+        if (instances[modelinfo.name]!=undefined){
+          console.log("NOTIFY Already added "+modelinfo.name)
+          return
+        }
+        instances[modelinfo.name]={
+          visible:true,
+          modeldata_name:modelinfo.modeldata_name,
+          material_name:"default",//Fixed? hidden?
+          rotation:[ 0.0, 0.0, 0.0, 1.0 ],
+          scale:[1.0,1.0,1.0],
+          translation:[0.0,0.0,0.0]
+        }
+        ractive.set("instances",instances)
+      },
+      deleteStl:function(ev,name){
+        console.log("TODO delete STL "+name)
+        //is in use?
+        let instList = ractive.get("instances")
+        for (instName in instList) {
+          if (instList[instName].modeldata_name==name) {
+            console.log("modeldata "+name+" is in use")
+            return
+          }
+        }
+        let stlFiles = ractive.get("stlFiles")
+        delete stlFiles[name]
+        console.log("TODO FREE FROM MEMORY ALSO")
+        ractive.set("stlFiles",stlFiles)
+      },
+      deleteMaterial:function(ev,name){
+        console.log("cmd delete material "+name)
+        //Is in use
+        let instList = ractive.get("instances")
+        for (instName in instList) {
+          if (instList[instName].material_name==name) {
+            console.log("material "+name+" is in use")
+            return
+          }
+        }
+        let materials=ractive.get("materials")
+        delete materials[name]
+        ractive.set("materials",materials)
+      },
+
+      deleteInstance:function(ev,name){
+        console.log("cmd delete instance "+name)
+        let instList = ractive.get("instances")
+        delete instList[name]
+        ractive.set("instances",instList)
+      }
+    })
+
+
+    function onProgressUpdate(donePoints,totalPoints){
+      ractive.set("progress",{"done":donePoints,"total":totalPoints})
+    }
+
+    /*
+    Uploads data... Stored as stl data
+    stl->gltf conversion happens on download or when building gltf scene for render
+    */
+    ractive.observe( 'fileUploadList', function ( newValue, oldValue, keypath ) {
+      if (newValue!=undefined){
+        if (0<newValue.length){
+          let fileItem=newValue[0]
+          console.log("Going to test file " + fileItem.name)
+          var fReader = new FileReader();
+          fReader.onload=function(filename,evt){
+            console.log("onload evt="+JSON.stringify(evt))
+            //let loadedData=evt.target.result;
+            let loadedData=fReader.result;
+            //console.log("Perkele keys="+JSON.stringify(Object.keys(evt)))
+            console.log("bytlelenni on "+loadedData.byteLength)
+            let raakadata=new Uint8Array(loadedData)
+            //console.log("raakadata="+JSON.stringify(raakadata))
+            console.log("And file item is "+filename)
+            wa_ImportStlFile(
+              raakadata,
+              filename,
+              onProgressUpdate,
+              function(failmsg){
+                console.log("TODO FAIL MESSAGE "+failmsg)
+              },
+              function(basename,meta){
+                console.log("basename="+basename)
+                let filedata=ractive.get("stlFiles")
+                filedata[basename]=meta
+                ractive.set("stlFiles",filedata)
+              }
+            )
+          }.bind(this,fileItem.name)
+          fReader.readAsArrayBuffer(fileItem)
+        }
+      }
+    })
+
+
+  </script>
+
+
+  <!-- Note the usage of `type=module` here as this is an ES6 module -->
+  <script type="module">
+    import init, {isonna,oottelu,convertStlData,convertToGlb} from './pkg/stltogltf.js';
+
+    async function run() {
+      console.log("waiting init");
+      await init();
+      isonnafunktio=isonna
+      oottelukoe=oottelu
+      wasm_convertStlData=convertStlData
+      wasm_convertToGlb=convertToGlb
+    }
+    run();
+  </script>
+
+
+</body>
+</html>
