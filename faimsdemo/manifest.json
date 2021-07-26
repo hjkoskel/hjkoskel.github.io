@@ -1,6 +1,7 @@
 {
   "short_name": "Fpga testbench",
   "name": "FPGA testbench fatpuppy ui demo",
+  "homepage":"https://hjkoskel.github.io/faimsdemo/",
   "icons": [
     {
       "src": "favicon.ico",
